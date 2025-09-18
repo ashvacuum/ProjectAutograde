@@ -13,6 +13,13 @@ class ClaudeCodeIntegration {
     try {
       this.claudeCodePath = await this.findClaudeCodeExecutable();
       this.isAvailable = !!this.claudeCodePath;
+
+      if (this.isAvailable) {
+        console.log('Claude Code integration initialized successfully');
+      } else {
+        console.log('Claude Code not available - grading will use basic analysis only');
+      }
+
       return this.isAvailable;
     } catch (error) {
       console.error('Claude Code initialization failed:', error);
@@ -26,22 +33,31 @@ class ClaudeCodeIntegration {
       'claude_desktop_app',
       'claude-desktop',
       'claude',
+      'Claude',
       path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Claude', 'Claude.exe'),
       path.join(process.env.PROGRAMFILES || '', 'Claude', 'Claude.exe'),
-      path.join(process.env['PROGRAMFILES(X86)'] || '', 'Claude', 'Claude.exe')
+      path.join(process.env['PROGRAMFILES(X86)'] || '', 'Claude', 'Claude.exe'),
+      path.join(process.env.USERPROFILE || '', 'AppData', 'Local', 'Programs', 'Claude', 'Claude.exe'),
+      'C:\\Users\\' + (process.env.USERNAME || '') + '\\AppData\\Local\\Programs\\Claude\\Claude.exe'
     ];
+
+    console.log('Searching for Claude Code executable...');
 
     for (const cmdPath of possiblePaths) {
       try {
+        console.log(`Testing path: ${cmdPath}`);
         const result = await this.testClaudeCodeCommand(cmdPath);
         if (result) {
+          console.log(`Found Claude Code at: ${cmdPath}`);
           return cmdPath;
         }
       } catch (error) {
+        console.log(`Path failed: ${cmdPath} - ${error.message}`);
         continue;
       }
     }
 
+    console.log('Claude Code executable not found in any standard location');
     return null;
   }
 

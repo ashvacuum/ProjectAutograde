@@ -116,17 +116,24 @@ class UnityAutoGraderApp {
             const indicatorElement = document.getElementById('claude-indicator');
 
             if (this.claudeCodeAvailable) {
-                statusElement.textContent = 'Claude Code is available and ready for grading.';
+                statusElement.textContent = 'Claude Code is available and ready for AI-powered grading.';
                 indicatorElement.className = 'status-indicator status-connected';
                 indicatorElement.textContent = 'Available';
             } else {
-                statusElement.textContent = 'Claude Code is not available. Some features may be limited.';
+                statusElement.textContent = 'Claude Code not found. Grading will use basic code analysis only. Install Claude Desktop for AI grading features.';
                 indicatorElement.className = 'status-indicator status-disconnected';
                 indicatorElement.textContent = 'Not Available';
             }
         } catch (error) {
             console.error('Error checking Claude Code status:', error);
             this.claudeCodeAvailable = false;
+
+            const statusElement = document.getElementById('claude-status');
+            const indicatorElement = document.getElementById('claude-indicator');
+
+            statusElement.textContent = 'Unable to check Claude Code status. Grading will use basic analysis.';
+            indicatorElement.className = 'status-indicator status-disconnected';
+            indicatorElement.textContent = 'Unknown';
         }
     }
 

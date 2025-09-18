@@ -32,17 +32,21 @@ if not exist "node_modules" (
 :: Create dist directory if it doesn't exist
 if not exist "dist" mkdir dist
 
-:: Build the Windows executable
+:: Build the Windows executable using electron-packager
 echo Building Windows executable...
-call npm run build-win
+call npm run package-win
 if %errorlevel% neq 0 (
-    echo Error: Build failed
-    pause
-    exit /b 1
+    echo Error: Build failed, trying alternative method...
+    call npx electron-packager . unity-auto-grader --platform=win32 --arch=x64 --out=dist --overwrite --prune=true
+    if %errorlevel% neq 0 (
+        echo Error: All build methods failed
+        pause
+        exit /b 1
+    )
 )
 
 echo.
 echo Build completed successfully!
-echo The installer can be found in the 'dist' folder.
+echo The application can be found in: dist\unity-auto-grader-win32-x64\unity-auto-grader.exe
 echo.
 pause

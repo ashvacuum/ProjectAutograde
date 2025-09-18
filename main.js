@@ -2,7 +2,6 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
 const express = require('express');
-const cors = require('cors');
 
 // Import our custom modules
 const CanvasAuth = require('./src/canvas/canvas-auth');
@@ -59,17 +58,35 @@ function createWindow() {
 
 function createExpressServer() {
   serverApp = express();
-  serverApp.use(cors());
   serverApp.use(express.json());
 
   serverApp.get('/health', (req, res) => {
     res.json({ status: 'healthy', timestamp: new Date().toISOString() });
   });
 
-  const port = 3001;
-  server = serverApp.listen(port, () => {
-    console.log(`Unity Auto-Grader server running on port ${port}`);
-  });
+  // Try different ports if 3001 is in use
+  const tryPorts = [3001, 3002, 3003, 3004, 3005];
+
+  function tryPort(portIndex) {
+    if (portIndex >= tryPorts.length) {
+      console.error('All ports are in use, server not started');
+      return;
+    }
+
+    const port = tryPorts[portIndex];
+    server = serverApp.listen(port, () => {
+      console.log(`Unity Auto-Grader server running on port ${port}`);
+    }).on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.log(`Port ${port} is in use, trying next port...`);
+        tryPort(portIndex + 1);
+      } else {
+        console.error('Server error:', err);
+      }
+    });
+  }
+
+  tryPort(0);
 }
 
 app.whenReady().then(() => {
@@ -386,10 +403,14 @@ ipcMain.handle('export-to-pdf', async (event, data, filename) => {
 // Initialize Claude Code on startup
 app.whenReady().then(async () => {
   try {
-    await claudeCode.initialize();
-    console.log('Claude Code initialization completed');
+    const isAvailable = await claudeCode.initialize();
+    if (isAvailable) {
+      console.log('✅ Claude Code integration ready');
+    } else {
+      console.log('⚠️  Claude Code not found - basic analysis mode enabled');
+    }
   } catch (error) {
-    console.log('Claude Code not available:', error.message);
+    console.log('⚠️  Claude Code initialization error:', error.message);
   }
 });
 

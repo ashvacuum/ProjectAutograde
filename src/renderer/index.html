@@ -207,6 +207,23 @@
             font-size: 14px;
         }
 
+        .form-input select,
+        .form-input option {
+            background: rgba(40, 40, 40, 0.95);
+            color: white;
+        }
+
+        select.form-input {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        select.form-input option {
+            background: rgba(40, 40, 40, 0.95);
+            color: white;
+            padding: 8px;
+        }
+
         .form-input::placeholder {
             color: rgba(255, 255, 255, 0.5);
         }
@@ -338,6 +355,52 @@
 
         .toast.warning {
             border-left-color: #f1c40f;
+        }
+
+        /* Scrollable Lists */
+        #assignments-list {
+            max-height: 400px;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        #criteria-templates {
+            max-height: 300px;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        #results-table {
+            max-height: 500px;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        /* Custom scrollbar styling */
+        #assignments-list::-webkit-scrollbar,
+        #criteria-templates::-webkit-scrollbar,
+        #results-table::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #assignments-list::-webkit-scrollbar-track,
+        #criteria-templates::-webkit-scrollbar-track,
+        #results-table::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        #assignments-list::-webkit-scrollbar-thumb,
+        #criteria-templates::-webkit-scrollbar-thumb,
+        #results-table::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+        }
+
+        #assignments-list::-webkit-scrollbar-thumb:hover,
+        #criteria-templates::-webkit-scrollbar-thumb:hover,
+        #results-table::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
         }
     </style>
 </head>
