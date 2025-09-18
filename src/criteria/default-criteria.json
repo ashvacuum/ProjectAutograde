@@ -1,0 +1,272 @@
+{
+  "templates": [
+    {
+      "name": "Unity Math Fundamentals",
+      "description": "Essential mathematical concepts for Unity game development including vectors, quaternions, transforms, and physics",
+      "items": [
+        {
+          "id": "vector-operations",
+          "name": "Vector Mathematics",
+          "description": "Implementation of Vector3/Vector2 operations including dot product, cross product, normalization, magnitude, and distance calculations",
+          "points": 25,
+          "weight": "high",
+          "keywords": ["Vector3", "Vector2", "Dot", "Cross", "Normalize", "Magnitude", "Distance", "normalized"],
+          "examples": ["Vector3.Dot(a, b)", "Vector3.Cross(forward, right)", "direction.normalized", "Vector3.Distance(start, end)"],
+          "detectionPatterns": [
+            "Vector[23]\\.(Dot|Cross|Normalize|Distance|Magnitude)",
+            "\\.normalized\\b",
+            "Vector[23]\\.\\w+\\s*\\(",
+            "magnitude\\b"
+          ]
+        },
+        {
+          "id": "quaternion-rotations",
+          "name": "Quaternion & Rotations",
+          "description": "Proper use of quaternions for rotations including LookRotation, FromToRotation, AngleAxis, and smooth rotation interpolation",
+          "points": 20,
+          "weight": "high",
+          "keywords": ["Quaternion", "LookRotation", "FromToRotation", "AngleAxis", "Euler", "Slerp"],
+          "examples": ["Quaternion.LookRotation(direction)", "Quaternion.FromToRotation(from, to)", "Quaternion.AngleAxis(angle, axis)", "Quaternion.Slerp(a, b, t)"],
+          "detectionPatterns": [
+            "Quaternion\\.(LookRotation|FromToRotation|AngleAxis|Euler|Slerp|Lerp)",
+            "Quaternion\\.(identity|Inverse)",
+            "eulerAngles\\b"
+          ]
+        },
+        {
+          "id": "transform-math",
+          "name": "Transform Mathematics",
+          "description": "Transform manipulation including position, rotation, scale operations and understanding of local vs world space",
+          "points": 20,
+          "weight": "high",
+          "keywords": ["transform.position", "transform.rotation", "transform.scale", "Translate", "Rotate", "LookAt"],
+          "examples": ["transform.Translate(direction)", "transform.Rotate(axis, angle)", "transform.LookAt(target)", "transform.localPosition"],
+          "detectionPatterns": [
+            "transform\\.(position|rotation|scale)",
+            "transform\\.(Translate|Rotate|LookAt)",
+            "transform\\.(local|world)",
+            "Transform\\s+\\w+\\s*="
+          ]
+        },
+        {
+          "id": "physics-integration",
+          "name": "Physics Calculations",
+          "description": "Physics-based calculations including forces, velocities, collision detection, and rigidbody interactions",
+          "points": 15,
+          "weight": "medium",
+          "keywords": ["Rigidbody", "AddForce", "velocity", "Physics", "Raycast", "Collision", "mass", "drag"],
+          "examples": ["rigidbody.AddForce(force)", "Physics.Raycast(ray)", "OnCollisionEnter(collision)", "rigidbody.velocity"],
+          "detectionPatterns": [
+            "Rigidbody\\b",
+            "AddForce\\b",
+            "\\.velocity\\b",
+            "Physics\\.(Raycast|CheckSphere|OverlapSphere)",
+            "OnCollision\\w+",
+            "OnTrigger\\w+"
+          ]
+        },
+        {
+          "id": "trigonometry",
+          "name": "Trigonometry Applications",
+          "description": "Use of trigonometric functions for circular motion, wave patterns, angle calculations, and procedural positioning",
+          "points": 10,
+          "weight": "medium",
+          "keywords": ["Mathf.Sin", "Mathf.Cos", "Mathf.Tan", "Mathf.PI", "Mathf.Atan2", "Mathf.Asin", "Mathf.Acos"],
+          "examples": ["Mathf.Sin(Time.time)", "Mathf.Cos(angle * Mathf.Deg2Rad)", "Mathf.Atan2(y, x)", "amplitude * Mathf.Sin(frequency * time)"],
+          "detectionPatterns": [
+            "Mathf\\.(Sin|Cos|Tan)\\s*\\(",
+            "Mathf\\.(Asin|Acos|Atan2)\\s*\\(",
+            "Mathf\\.PI\\b",
+            "Mathf\\.(Deg2Rad|Rad2Deg)\\b"
+          ]
+        },
+        {
+          "id": "interpolation-smoothing",
+          "name": "Interpolation & Smoothing",
+          "description": "Smooth transitions and animations using Lerp, Slerp, SmoothStep, and other interpolation methods",
+          "points": 10,
+          "weight": "low",
+          "keywords": ["Mathf.Lerp", "Vector3.Lerp", "Quaternion.Slerp", "SmoothStep", "MoveTowards", "RotateTowards"],
+          "examples": ["Mathf.Lerp(a, b, t)", "Vector3.Slerp(from, to, t)", "Mathf.SmoothStep(0, 1, t)", "Vector3.MoveTowards(current, target, maxDistanceDelta)"],
+          "detectionPatterns": [
+            "\\.(Lerp|Slerp)\\s*\\(",
+            "Mathf\\.SmoothStep\\s*\\(",
+            "MoveTowards\\s*\\(",
+            "RotateTowards\\s*\\("
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Unity Code Quality & Best Practices",
+      "description": "Code organization, performance optimization, and Unity-specific best practices for maintainable game development",
+      "items": [
+        {
+          "id": "monobehaviour-structure",
+          "name": "MonoBehaviour Structure",
+          "description": "Proper MonoBehaviour class structure with appropriate use of Unity lifecycle methods and component organization",
+          "points": 15,
+          "weight": "high",
+          "keywords": ["MonoBehaviour", "Start", "Update", "Awake", "OnEnable", "OnDisable", "FixedUpdate", "LateUpdate"],
+          "examples": ["public class Player : MonoBehaviour", "void Start()", "void Update()", "[SerializeField] private float speed"],
+          "detectionPatterns": [
+            ":\\s*MonoBehaviour\\b",
+            "void\\s+(Start|Update|Awake|OnEnable|OnDisable)\\s*\\(",
+            "\\[SerializeField\\]",
+            "void\\s+FixedUpdate\\s*\\("
+          ]
+        },
+        {
+          "id": "performance-optimization",
+          "name": "Performance Optimization",
+          "description": "Efficient coding practices including component caching, avoiding expensive operations in Update, and proper object pooling",
+          "points": 20,
+          "weight": "high",
+          "keywords": ["GetComponent", "FindObjectOfType", "Update", "cache", "static", "const", "readonly"],
+          "examples": ["private Rigidbody rb; // Cached component", "if (cachedTransform == null) cachedTransform = GetComponent<Transform>();"],
+          "detectionPatterns": [
+            "GetComponent\\s*<",
+            "FindObjectOfType\\s*<",
+            "GameObject\\.Find\\s*\\(",
+            "\\b(static|const|readonly)\\b",
+            "Cache|cache"
+          ]
+        },
+        {
+          "id": "variable-naming",
+          "name": "Naming Conventions",
+          "description": "Consistent and descriptive naming following C# conventions with meaningful variable and method names",
+          "points": 10,
+          "weight": "low",
+          "keywords": ["camelCase", "PascalCase", "descriptive", "meaningful"],
+          "examples": ["playerSpeed", "CalculateDistance", "isGameActive", "MaxHealthPoints"],
+          "detectionPatterns": [
+            "\\b[a-z][a-zA-Z0-9]*\\b",
+            "\\b[A-Z][a-zA-Z0-9]*\\b",
+            "\\bis[A-Z]\\w*\\b",
+            "\\bhas[A-Z]\\w*\\b"
+          ]
+        },
+        {
+          "id": "error-handling",
+          "name": "Error Handling & Safety",
+          "description": "Defensive programming with null checks, bounds checking, and appropriate error handling",
+          "points": 15,
+          "weight": "medium",
+          "keywords": ["null", "try", "catch", "bounds", "range", "validation"],
+          "examples": ["if (target != null)", "try { ... } catch (Exception e)", "if (index >= 0 && index < array.Length)"],
+          "detectionPatterns": [
+            "!=\\s*null\\b",
+            "==\\s*null\\b",
+            "try\\s*\\{",
+            "catch\\s*\\(",
+            "\\blength\\b.*[<>]=?",
+            "\\bCount\\b.*[<>]=?"
+          ]
+        },
+        {
+          "id": "code-organization",
+          "name": "Code Organization",
+          "description": "Well-organized code structure with proper use of regions, comments, and logical method grouping",
+          "points": 10,
+          "weight": "medium",
+          "keywords": ["region", "endregion", "comment", "summary", "namespace", "using"],
+          "examples": ["#region Private Methods", "/// <summary>", "using UnityEngine;", "// Calculate physics velocity"],
+          "detectionPatterns": [
+            "#region\\b",
+            "///\\s*<summary>",
+            "//\\s*.+",
+            "using\\s+\\w+",
+            "namespace\\s+\\w+"
+          ]
+        },
+        {
+          "id": "unity-best-practices",
+          "name": "Unity Best Practices",
+          "description": "Following Unity-specific conventions including proper use of SerializeField, component references, and scene management",
+          "points": 10,
+          "weight": "medium",
+          "keywords": ["SerializeField", "public", "private", "GameObject", "Component", "Tag", "Layer"],
+          "examples": ["[SerializeField] private float speed", "gameObject.tag", "GetComponent<Rigidbody>()", "CompareTag(\"Player\")"],
+          "detectionPatterns": [
+            "\\[SerializeField\\]",
+            "CompareTag\\s*\\(",
+            "gameObject\\.(tag|layer)",
+            "SetActive\\s*\\(",
+            "Instantiate\\s*\\("
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Advanced Unity Math Concepts",
+      "description": "Advanced mathematical concepts for complex game mechanics including matrices, splines, and procedural generation",
+      "items": [
+        {
+          "id": "matrix-transformations",
+          "name": "Matrix Transformations",
+          "description": "Understanding and implementation of transformation matrices for advanced spatial calculations",
+          "points": 20,
+          "weight": "high",
+          "keywords": ["Matrix4x4", "TRS", "MultiplyMatrix", "transform", "worldToLocalMatrix", "localToWorldMatrix"],
+          "examples": ["Matrix4x4.TRS(position, rotation, scale)", "transform.worldToLocalMatrix", "Matrix4x4.identity"],
+          "detectionPatterns": [
+            "Matrix4x4\\b",
+            "worldToLocalMatrix\\b",
+            "localToWorldMatrix\\b",
+            "TRS\\s*\\(",
+            "MultiplyMatrix\\b"
+          ]
+        },
+        {
+          "id": "procedural-generation",
+          "name": "Procedural Generation",
+          "description": "Mathematical algorithms for procedural content generation including noise functions and random distributions",
+          "points": 25,
+          "weight": "high",
+          "keywords": ["Perlin", "noise", "Random", "seed", "algorithm", "generation", "procedural"],
+          "examples": ["Mathf.PerlinNoise(x, y)", "Random.Range(min, max)", "Random.seed = seedValue", "for (int i = 0; i < count; i++)"],
+          "detectionPatterns": [
+            "PerlinNoise\\s*\\(",
+            "Random\\.(Range|seed|value)",
+            "\\bseed\\b",
+            "noise\\b.*\\w+",
+            "procedural\\b"
+          ]
+        },
+        {
+          "id": "splines-curves",
+          "name": "Splines & Curves",
+          "description": "Implementation of Bézier curves, splines, and other curve mathematics for smooth motion and paths",
+          "points": 15,
+          "weight": "medium",
+          "keywords": ["Bezier", "spline", "curve", "cubic", "interpolate", "path"],
+          "examples": ["CubicBezier(p0, p1, p2, p3, t)", "AnimationCurve.Evaluate(time)", "path interpolation"],
+          "detectionPatterns": [
+            "Bezier\\b",
+            "AnimationCurve\\b",
+            "\\bcurve\\b",
+            "spline\\b",
+            "Evaluate\\s*\\("
+          ]
+        },
+        {
+          "id": "optimization-algorithms",
+          "name": "Mathematical Optimization",
+          "description": "Implementation of optimization algorithms for pathfinding, AI decision making, or resource management",
+          "points": 20,
+          "weight": "medium",
+          "keywords": ["algorithm", "optimize", "pathfinding", "AStar", "dijkstra", "heuristic"],
+          "examples": ["A* pathfinding", "optimization loops", "heuristic functions", "cost calculations"],
+          "detectionPatterns": [
+            "\\bAStar\\b",
+            "pathfind\\w*",
+            "heuristic\\b",
+            "\\bcost\\b.*calculation",
+            "optimize\\w*"
+          ]
+        }
+      ]
+    }
+  ]
+}
