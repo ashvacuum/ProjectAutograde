@@ -34,6 +34,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       enableRemoteModule: false,
+      webSecurity: !isDev,
       preload: path.join(__dirname, 'preload.js')
     },
     icon: path.join(__dirname, 'assets', 'icon.png'),
@@ -42,6 +43,13 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'src', 'renderer', 'index.html'));
+
+  // Filter out autofill console errors
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    if (message.includes('Autofill.enable') || message.includes('Autofill.setAddresses')) {
+      return; // Suppress these specific console messages
+    }
+  });
 
   if (isDev) {
     mainWindow.webContents.openDevTools();
@@ -207,7 +215,7 @@ ipcMain.handle('canvas-post-grade', async (event, courseId, assignmentId, userId
 });
 
 // Unity Grader IPC Handlers
-ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria) => {
+ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assignmentDetails = null) => {
   try {
     // Send progress updates to the renderer
     mainWindow.webContents.send('grading-progress', {
@@ -228,7 +236,7 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria) => {
 
     // If Claude Code is available, use it for grading
     if (await claudeCode.initialize()) {
-      const gradingResult = await claudeCode.analyzeUnityProject(analysis, criteria);
+      const gradingResult = await claudeCode.analyzeUnityProject(analysis, criteria, assignmentDetails);
 
       mainWindow.webContents.send('grading-progress', {
         current: 1,

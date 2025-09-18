@@ -298,7 +298,7 @@ class GitCommands {
       }
 
       const result = await this.executeCommand(command);
-      return result.stdout.split('\n').filter(line => line.trim().length > 0);
+      return result.stdout.split(/\r?\n/).filter(line => line.trim().length > 0);
     } catch (error) {
       console.warn('Failed to find C# files:', error);
       return [];

@@ -531,9 +531,10 @@
                 </div>
                 <div class="content-area">
                     <div class="card">
-                        <h3>Create New Criteria Template</h3>
+                        <h3>Criteria Template Management</h3>
                         <button class="btn" onclick="createNewCriteria()">+ New Template</button>
-                        <button class="btn btn-secondary" onclick="loadDefaultCriteria()">Load Defaults</button>
+                        <button class="btn btn-secondary" onclick="loadDefaultCriteria()">Load Default Rubric</button>
+                        <button class="btn btn-secondary" onclick="clearAndLoadNewRubric()" style="margin-left: 8px;">Reset to New Rubric</button>
                     </div>
 
                     <div class="card">
@@ -602,16 +603,34 @@
                 </div>
                 <div class="content-area">
                     <div class="card">
-                        <h3>Export Options</h3>
-                        <button class="btn" onclick="exportResults('csv')">Export to CSV</button>
-                        <button class="btn btn-secondary" onclick="exportResults('json')">Export to JSON</button>
-                        <button class="btn btn-secondary" onclick="exportResults('pdf')">Export to PDF</button>
+                        <h3>Results Filter</h3>
+                        <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+                            <button class="btn" id="filter-all" onclick="filterResults('all')">All Results</button>
+                            <button class="btn btn-secondary" id="filter-graded" onclick="filterResults('graded')">Graded Only</button>
+                            <button class="btn btn-secondary" id="filter-review" onclick="filterResults('review')">Needs Review</button>
+                        </div>
+                        <div id="results-summary" style="padding: 8px 0; font-size: 14px; opacity: 0.8;"></div>
                     </div>
 
                     <div class="card">
-                        <h3>Results Table</h3>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                            <h3>Results Table</h3>
+                            <div>
+                                <button class="btn btn-secondary" onclick="exportResults('csv')">Export CSV</button>
+                                <button class="btn btn-secondary" onclick="exportResults('json')" style="margin-left: 8px;">Export JSON</button>
+                                <button class="btn btn-secondary" onclick="openCanvasGradebook()" style="margin-left: 8px;">Open Canvas Gradebook</button>
+                            </div>
+                        </div>
                         <div id="results-table">
                             <p>No grading results available.</p>
+                        </div>
+                    </div>
+
+                    <div class="card" id="instructor-review-panel" style="display: none;">
+                        <h3>Instructor Review Queue</h3>
+                        <p>Submissions that require manual review due to issues with GitHub URLs or other problems.</p>
+                        <div id="review-queue">
+                            <p>No submissions currently in review queue.</p>
                         </div>
                     </div>
                 </div>

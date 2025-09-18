@@ -1,0 +1,7 @@
+{
+  "llmProvider": "deepseek",
+  "claudeApiKey": "your-claude-api-key-here",
+  "openaiApiKey": "your-openai-api-key-here",
+  "groqApiKey": "your-groq-api-key-here",
+  "deepseekApiKey": "your-deepseek-api-key-here"
+}
