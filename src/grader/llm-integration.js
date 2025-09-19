@@ -1,137 +1,38 @@
 const fs = require('fs').promises;
 const path = require('path');
 
-class ClaudeCodeIntegration {
-  constructor() {
+class LLMIntegration {
+  constructor(apiKeyManager) {
+    this.apiKeyManager = apiKeyManager;
     this.isAvailable = false;
-    this.apiKey = null;
+    this.activeProvider = null;
     this.activeAnalyses = new Map();
   }
 
   async initialize() {
     try {
-      this.apiKey = await this.loadConfig();
-      this.isAvailable = !!this.apiKey;
+      const activeProvider = await this.apiKeyManager.getActiveProvider();
 
-      if (this.isAvailable) {
-        console.log(`${this.provider.toUpperCase()} API integration initialized successfully`);
+      if (activeProvider) {
+        this.activeProvider = activeProvider;
+        this.isAvailable = true;
+        console.log(`✅ LLM integration initialized with ${activeProvider.config.providerInfo.name}`);
       } else {
-        console.log('LLM API not available - grading will use basic analysis only');
-        console.log('To enable LLM integration, add your API key to environment variable or config.json');
-        console.log('Supported providers: claude, openai, groq, deepseek');
+        console.log('⚠️ No active LLM provider found. Please configure an API key in Settings.');
+        this.isAvailable = false;
       }
 
       return this.isAvailable;
     } catch (error) {
-      console.error('Claude API initialization failed:', error);
+      console.error('LLM integration initialization failed:', error);
       this.isAvailable = false;
       return false;
     }
   }
 
-  async loadConfig() {
-    // Try config file first
-    try {
-      const configPath = path.join(__dirname, '../../config.json');
-      const configContent = await fs.readFile(configPath, 'utf-8');
-      const config = JSON.parse(configContent);
-
-      // Set provider and API key from config
-      this.provider = config.llmProvider || 'claude';
-
-      switch (this.provider) {
-        case 'claude':
-          this.apiKey = config.claudeApiKey || process.env.CLAUDE_API_KEY;
-          break;
-        case 'openai':
-          this.apiKey = config.openaiApiKey || process.env.OPENAI_API_KEY;
-          break;
-        case 'groq':
-          this.apiKey = config.groqApiKey || process.env.GROQ_API_KEY;
-          break;
-        case 'deepseek':
-          this.apiKey = config.deepseekApiKey || process.env.DEEPSEEK_API_KEY;
-          break;
-        default:
-          this.provider = 'claude';
-          this.apiKey = config.claudeApiKey || process.env.CLAUDE_API_KEY;
-      }
-
-      if (this.apiKey) {
-        console.log(`Using ${this.provider} API from config.json`);
-        return this.apiKey;
-      }
-    } catch (error) {
-      console.log('No config.json found or no API key in config');
-    }
-
-    // Fallback to environment variables
-    if (process.env.CLAUDE_API_KEY) {
-      this.provider = 'claude';
-      this.apiKey = process.env.CLAUDE_API_KEY;
-      console.log('Using Claude API key from environment variable');
-      return this.apiKey;
-    }
-
-    if (process.env.OPENAI_API_KEY) {
-      this.provider = 'openai';
-      this.apiKey = process.env.OPENAI_API_KEY;
-      console.log('Using OpenAI API key from environment variable');
-      return this.apiKey;
-    }
-
-    return null;
-  }
-
-  async fileExists(filePath) {
-    try {
-      await fs.access(filePath);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-
-  async testClaudeCodeCommand(cmdPath) {
-    return new Promise((resolve) => {
-      let command, args;
-
-      if (cmdPath.startsWith('npx')) {
-        command = 'npx';
-        args = ['claude-code', '--help'];
-      } else if (cmdPath.endsWith('.ps1')) {
-        command = 'powershell';
-        args = ['-ExecutionPolicy', 'Bypass', '-File', cmdPath, '--help'];
-      } else {
-        command = cmdPath;
-        args = ['--help'];
-      }
-
-      const process = spawn(command, args, {
-        stdio: 'pipe',
-        timeout: 5000,
-        shell: true
-      });
-
-      process.on('close', (code) => {
-        resolve(code === 0);
-      });
-
-      process.on('error', () => {
-        resolve(false);
-      });
-
-      setTimeout(() => {
-        process.kill();
-        resolve(false);
-      }, 5000);
-    });
-  }
-
   async analyzeUnityProject(projectAnalysis, gradingCriteria, assignmentDetails = null) {
     if (!this.isAvailable) {
-      throw new Error('Claude Code is not available. Please ensure Claude Desktop is installed and accessible.');
+      throw new Error('No LLM provider is available. Please configure an API key in Settings.');
     }
 
     const analysisId = this.generateAnalysisId();
@@ -143,17 +44,22 @@ class ClaudeCodeIntegration {
         startTime: Date.now(),
         projectAnalysis,
         criteria: gradingCriteria,
-        assignmentDetails
+        assignmentDetails,
+        provider: this.activeProvider.provider
       });
 
-      const result = await this.executeClaudeCodeAnalysis(prompt, projectAnalysis);
+      const result = await this.executeLLMAnalysis(prompt, projectAnalysis);
 
       this.activeAnalyses.set(analysisId, {
         status: 'completed',
         startTime: this.activeAnalyses.get(analysisId).startTime,
         endTime: Date.now(),
-        result
+        result,
+        provider: this.activeProvider.provider
       });
+
+      // Update last used timestamp for the provider
+      await this.apiKeyManager.updateLastUsed(this.activeProvider.provider);
 
       return {
         analysisId,
@@ -165,7 +71,8 @@ class ClaudeCodeIntegration {
       this.activeAnalyses.set(analysisId, {
         status: 'failed',
         error: error.message,
-        endTime: Date.now()
+        endTime: Date.now(),
+        provider: this.activeProvider?.provider || 'unknown'
       });
 
       throw error;
@@ -353,7 +260,7 @@ Please provide your assessment using this exact JSON structure that matches the 
     "gameplayDesign": "Engaging mechanics with good player experience considerations"
   },
   "needsInstructorReview": false,
-  "gradingNotes": "Standard automated grading completed successfully. Score reflects rubric criteria with emphasis on solution quality and technical execution."
+  "gradingNotes": "Automated grading completed successfully using ${this.activeProvider?.config.providerInfo.name || 'LLM'}. Score reflects rubric criteria with emphasis on solution quality and technical execution."
 }
 \`\`\`
 
@@ -450,21 +357,13 @@ ${assignmentDetails.description || 'Standard Unity math programming assignment f
     return formatted;
   }
 
-  async executeClaudeCodeAnalysis(prompt, projectAnalysis) {
-    const tempDir = path.join(__dirname, '../../temp');
-
-    try {
-      await fs.mkdir(tempDir, { recursive: true });
-
-      // Create a comprehensive prompt that includes the project data
-      const fullPrompt = this.buildAnalysisPrompt(prompt, projectAnalysis);
-
-      return await this.callLLMAPI(fullPrompt);
-
-    } catch (error) {
-      console.error('Claude Code analysis failed:', error);
-      throw error;
+  async executeLLMAnalysis(prompt, projectAnalysis) {
+    if (!this.activeProvider) {
+      throw new Error('No active LLM provider available');
     }
+
+    const fullPrompt = this.buildAnalysisPrompt(prompt, projectAnalysis);
+    return await this.callLLMAPI(fullPrompt);
   }
 
   buildAnalysisPrompt(originalPrompt, projectAnalysis) {
@@ -490,31 +389,37 @@ Please provide a detailed analysis and grading based on this information.`;
   }
 
   async callLLMAPI(prompt) {
-    if (!this.apiKey) {
-      throw new Error(`${this.provider} API key not available`);
+    if (!this.activeProvider || !this.activeProvider.config.apiKey) {
+      throw new Error('No API key available for the active provider');
     }
 
-    console.log(`Calling ${this.provider.toUpperCase()} API...`);
+    const provider = this.activeProvider.provider;
+    const config = this.activeProvider.config;
+
+    console.log(`🤖 Calling ${config.providerInfo.name} API...`);
 
     try {
       let response, data, content;
 
-      switch (this.provider) {
-        case 'claude':
+      switch (provider) {
+        case 'anthropic':
           response = await fetch('https://api.anthropic.com/v1/messages', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'x-api-key': this.apiKey,
+              'x-api-key': config.apiKey,
               'anthropic-version': '2023-06-01'
             },
             body: JSON.stringify({
-              model: 'claude-3-sonnet-20240229',
+              model: 'claude-3-5-sonnet-20241022',
               max_tokens: 4000,
               messages: [{ role: 'user', content: prompt }]
             })
           });
-          if (!response.ok) throw new Error(`Claude API error: ${response.status}`);
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Anthropic API error: ${response.status} - ${errorText}`);
+          }
           data = await response.json();
           content = data.content[0].text;
           break;
@@ -524,57 +429,116 @@ Please provide a detailed analysis and grading based on this information.`;
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${this.apiKey}`
+              'Authorization': `Bearer ${config.apiKey}`
             },
             body: JSON.stringify({
-              model: 'gpt-4',
+              model: 'gpt-4o',
               max_tokens: 4000,
               messages: [{ role: 'user', content: prompt }]
             })
           });
-          if (!response.ok) throw new Error(`OpenAI API error: ${response.status}`);
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
+          }
           data = await response.json();
           content = data.choices[0].message.content;
           break;
 
-        case 'groq':
-          response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        case 'google':
+          response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${config.apiKey}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              contents: [{
+                parts: [{ text: prompt }]
+              }],
+              generationConfig: {
+                maxOutputTokens: 4000
+              }
+            })
+          });
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Google AI API error: ${response.status} - ${errorText}`);
+          }
+          data = await response.json();
+          content = data.candidates[0].content.parts[0].text;
+          break;
+
+        case 'cohere':
+          response = await fetch('https://api.cohere.ai/v1/chat', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${this.apiKey}`
+              'Authorization': `Bearer ${config.apiKey}`
             },
             body: JSON.stringify({
-              model: 'llama3-70b-8192',
-              max_tokens: 4000,
-              messages: [{ role: 'user', content: prompt }]
+              model: 'command-r-plus',
+              message: prompt,
+              max_tokens: 4000
             })
           });
-          if (!response.ok) throw new Error(`Groq API error: ${response.status}`);
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Cohere API error: ${response.status} - ${errorText}`);
+          }
+          data = await response.json();
+          content = data.text;
+          break;
+
+        case 'azure':
+          if (!config.endpoint || !config.deploymentName) {
+            throw new Error('Azure OpenAI requires endpoint and deployment name');
+          }
+          const endpoint = config.endpoint.replace(/\/$/, '');
+          response = await fetch(`${endpoint}/openai/deployments/${config.deploymentName}/chat/completions?api-version=2023-05-15`, {
+            method: 'POST',
+            headers: {
+              'api-key': config.apiKey,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              messages: [{ role: 'user', content: prompt }],
+              max_tokens: 4000
+            })
+          });
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Azure OpenAI API error: ${response.status} - ${errorText}`);
+          }
           data = await response.json();
           content = data.choices[0].message.content;
           break;
 
-        case 'deepseek':
-          response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+        case 'custom':
+          if (!config.endpoint) {
+            throw new Error('Custom API requires endpoint URL');
+          }
+          const customEndpoint = config.endpoint.replace(/\/$/, '');
+          response = await fetch(`${customEndpoint}/chat/completions`, {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${this.apiKey}`
+              'Authorization': `Bearer ${config.apiKey}`,
+              'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              model: 'deepseek-chat',
-              max_tokens: 4000,
-              messages: [{ role: 'user', content: prompt }]
+              messages: [{ role: 'user', content: prompt }],
+              max_tokens: 4000
             })
           });
-          if (!response.ok) throw new Error(`DeepSeek API error: ${response.status}`);
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Custom API error: ${response.status} - ${errorText}`);
+          }
           data = await response.json();
           content = data.choices[0].message.content;
           break;
 
         default:
-          throw new Error(`Unsupported provider: ${this.provider}`);
+          throw new Error(`Unsupported provider: ${provider}`);
       }
 
       try {
@@ -586,15 +550,17 @@ Please provide a detailed analysis and grading based on this information.`;
           overallGrade: 75,
           maxPoints: 100,
           criteriaScores: {},
-          strengths: ['Code analysis completed'],
-          improvements: ['Review suggestions in raw output'],
-          detailedFeedback: content.substring(0, 1000),
+          overallFeedback: {
+            strengths: ['Code analysis completed'],
+            improvements: ['Review suggestions in raw output'],
+            detailedFeedback: content.substring(0, 1000)
+          },
           rawOutput: content
         };
       }
 
     } catch (error) {
-      console.error(`${this.provider} API call failed:`, error);
+      console.error(`${config.providerInfo.name} API call failed:`, error);
       throw error;
     }
   }
@@ -624,10 +590,16 @@ Please provide a detailed analysis and grading based on this information.`;
   getAvailabilityStatus() {
     return {
       isAvailable: this.isAvailable,
-      claudeCodePath: this.claudeCodePath,
+      activeProvider: this.activeProvider?.provider || null,
+      providerName: this.activeProvider?.config.providerInfo.name || null,
       activeAnalyses: this.activeAnalyses.size
     };
   }
+
+  async refreshProvider() {
+    // Refresh the active provider in case the user changed settings
+    return await this.initialize();
+  }
 }
 
-module.exports = ClaudeCodeIntegration;
+module.exports = LLMIntegration;

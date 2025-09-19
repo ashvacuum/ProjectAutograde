@@ -6,9 +6,10 @@ const express = require('express');
 // Import our custom modules
 const CanvasAuth = require('./src/canvas/canvas-auth');
 const UnityGrader = require('./src/grader/unity-grader');
-const ClaudeCodeIntegration = require('./src/grader/claude-code-integration');
+const LLMIntegration = require('./src/grader/llm-integration');
 const CriteriaManager = require('./src/criteria/criteria-manager');
 const ResultsExporter = require('./src/grader/results-exporter');
+const APIKeyManager = require('./src/utils/api-key-manager');
 
 const store = new Store();
 let mainWindow;
@@ -18,7 +19,8 @@ let server;
 // Initialize service instances
 const canvasAuth = new CanvasAuth();
 const unityGrader = new UnityGrader();
-const claudeCode = new ClaudeCodeIntegration();
+const apiKeyManager = new APIKeyManager();
+const llmIntegration = new LLMIntegration(apiKeyManager);
 const criteriaManager = new CriteriaManager();
 const resultsExporter = new ResultsExporter();
 
@@ -35,7 +37,11 @@ function createWindow() {
       contextIsolation: true,
       enableRemoteModule: false,
       webSecurity: !isDev,
-      preload: path.join(__dirname, 'preload.js')
+      preload: path.join(__dirname, 'preload.js'),
+      // Disable autofill to prevent console warnings
+      autofillEnabled: false,
+      enableWebSQL: false,
+      experimentalFeatures: false
     },
     icon: path.join(__dirname, 'assets', 'icon.png'),
     titleBarStyle: 'default',
@@ -44,15 +50,38 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'src', 'renderer', 'index.html'));
 
-  // Filter out autofill console errors
+  // Filter out autofill console errors using the new event format
   mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
-    if (message.includes('Autofill.enable') || message.includes('Autofill.setAddresses')) {
-      return; // Suppress these specific console messages
+    // Suppress autofill-related console errors
+    if (message && (message.includes('Autofill.enable') || message.includes('Autofill.setAddresses'))) {
+      event.preventDefault?.();
+      return;
+    }
+
+    // Log other console messages in development
+    if (isDev && level >= 2) { // Only show warnings and errors
+      console.log(`Console [${level}]:`, message);
     }
   });
 
   if (isDev) {
-    mainWindow.webContents.openDevTools();
+    // Open DevTools with reduced noise
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
+
+    // Disable some DevTools features that cause warnings
+    mainWindow.webContents.once('devtools-opened', () => {
+      mainWindow.webContents.devToolsWebContents?.executeJavaScript(`
+        // Suppress autofill warnings in DevTools
+        const originalError = console.error;
+        console.error = function(...args) {
+          const message = args.join(' ');
+          if (message.includes('Autofill.enable') || message.includes('Autofill.setAddresses')) {
+            return;
+          }
+          originalError.apply(console, args);
+        };
+      `);
+    });
   }
 
   mainWindow.once('ready-to-show', () => {
@@ -217,6 +246,10 @@ ipcMain.handle('canvas-post-grade', async (event, courseId, assignmentId, userId
 // Unity Grader IPC Handlers
 ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assignmentDetails = null) => {
   try {
+    // Ensure all data is serializable
+    const cleanCriteria = JSON.parse(JSON.stringify(criteria));
+    const cleanAssignmentDetails = assignmentDetails ? JSON.parse(JSON.stringify(assignmentDetails)) : null;
+
     // Send progress updates to the renderer
     mainWindow.webContents.send('grading-progress', {
       current: 1,
@@ -225,7 +258,7 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
       currentStudent: 'Analyzing project...'
     });
 
-    const analysis = await unityGrader.analyzeProject(repoUrl, criteria);
+    const analysis = await unityGrader.analyzeProject(repoUrl, cleanCriteria);
 
     mainWindow.webContents.send('grading-progress', {
       current: 1,
@@ -234,9 +267,9 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
       currentStudent: 'Generating grade...'
     });
 
-    // If Claude Code is available, use it for grading
-    if (await claudeCode.initialize()) {
-      const gradingResult = await claudeCode.analyzeUnityProject(analysis, criteria, assignmentDetails);
+    // If LLM is available, use it for grading
+    if (await llmIntegration.initialize()) {
+      const gradingResult = await llmIntegration.analyzeUnityProject(analysis, cleanCriteria, cleanAssignmentDetails);
 
       mainWindow.webContents.send('grading-progress', {
         current: 1,
@@ -251,7 +284,7 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
         grade: gradingResult
       };
     } else {
-      // Fallback to basic analysis without Claude Code
+      // Fallback to basic analysis without LLM
       mainWindow.webContents.send('grading-progress', {
         current: 1,
         total: 1,
@@ -263,7 +296,7 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
         success: true,
         analysis: analysis,
         grade: null,
-        warning: 'Claude Code not available - basic analysis only'
+        warning: 'No LLM provider available - basic analysis only'
       };
     }
   } catch (error) {
@@ -281,25 +314,34 @@ ipcMain.handle('grader-cancel', () => {
   return { success: true };
 });
 
-// Claude Code Integration IPC Handlers
-ipcMain.handle('claude-code-analyze', async (event, code, criteria, context) => {
+// LLM Integration IPC Handlers
+ipcMain.handle('llm-analyze', async (event, code, criteria, context) => {
   try {
-    if (!await claudeCode.initialize()) {
-      return { success: false, error: 'Claude Code not available' };
+    if (!await llmIntegration.initialize()) {
+      return { success: false, error: 'No LLM provider available' };
     }
 
-    return await claudeCode.analyzeUnityProject(context, criteria);
+    return await llmIntegration.analyzeUnityProject(context, criteria);
   } catch (error) {
     return { success: false, error: error.message };
   }
 });
 
-ipcMain.handle('claude-code-get-result', async (event, taskId) => {
+ipcMain.handle('llm-get-result', async (event, taskId) => {
   try {
     if (taskId === 'status') {
-      return await claudeCode.getAvailabilityStatus();
+      return await llmIntegration.getAvailabilityStatus();
     }
-    return await claudeCode.getAnalysisResult(taskId);
+    return await llmIntegration.getAnalysisResult(taskId);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('llm-refresh-provider', async () => {
+  try {
+    const isAvailable = await llmIntegration.refreshProvider();
+    return { success: true, isAvailable };
   } catch (error) {
     return { success: false, error: error.message };
   }
@@ -408,17 +450,114 @@ ipcMain.handle('export-to-pdf', async (event, data, filename) => {
   }
 });
 
-// Initialize Claude Code on startup
+// API Key Management IPC Handlers
+ipcMain.handle('api-keys-get-providers', async () => {
+  try {
+    return { success: true, providers: apiKeyManager.getSupportedProviders() };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('api-keys-get-all', async () => {
+  try {
+    const keys = await apiKeyManager.getAllAPIKeys();
+    return { success: true, keys };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('api-keys-set', async (event, provider, config) => {
+  try {
+    // Ensure we have serializable data
+    const cleanConfig = JSON.parse(JSON.stringify(config));
+    const result = await apiKeyManager.setAPIKey(provider, cleanConfig);
+    return result;
+  } catch (error) {
+    console.error('API key set error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('api-keys-get', async (event, provider) => {
+  try {
+    const keyData = await apiKeyManager.getAPIKey(provider);
+    return { success: true, keyData };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('api-keys-delete', async (event, provider) => {
+  try {
+    const result = await apiKeyManager.deleteAPIKey(provider);
+    return result;
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('api-keys-test', async (event, provider, config = null) => {
+  try {
+    // Ensure we have serializable data if config is provided
+    const cleanConfig = config ? JSON.parse(JSON.stringify(config)) : null;
+    const result = await apiKeyManager.testAPIKey(provider, cleanConfig);
+    return result;
+  } catch (error) {
+    console.error('API key test error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('api-keys-toggle', async (event, provider, isActive) => {
+  try {
+    const result = await apiKeyManager.toggleProvider(provider, isActive);
+    return result;
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('api-keys-get-active', async () => {
+  try {
+    const active = await apiKeyManager.getActiveProvider();
+    return { success: true, active };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('api-keys-export-config', async () => {
+  try {
+    const config = await apiKeyManager.exportConfig();
+    return { success: true, config };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('api-keys-clear-all', async () => {
+  try {
+    const result = await apiKeyManager.clearAllKeys();
+    return result;
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Initialize LLM integration on startup
 app.whenReady().then(async () => {
   try {
-    const isAvailable = await claudeCode.initialize();
+    const isAvailable = await llmIntegration.initialize();
     if (isAvailable) {
-      console.log('✅ Claude Code integration ready');
+      console.log('✅ LLM integration ready');
     } else {
-      console.log('⚠️  Claude Code not found - basic analysis mode enabled');
+      console.log('⚠️  No LLM provider configured - basic analysis mode enabled');
+      console.log('💡 Configure an API key in Settings to enable AI-powered grading');
     }
   } catch (error) {
-    console.log('⚠️  Claude Code initialization error:', error.message);
+    console.log('⚠️  LLM initialization error:', error.message);
   }
 });
 

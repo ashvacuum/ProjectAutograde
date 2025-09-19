@@ -14,8 +14,10 @@ class UnityAutoGraderApp {
     async init() {
         this.setupEventListeners();
         await this.checkStoredCanvasAuth();
-        await this.checkClaudeCodeStatus();
+        await this.checkLLMStatus();
         this.loadDashboardData();
+        this.currentEditingProvider = null;
+        this.supportedProviders = {};
     }
 
     setupEventListeners() {
@@ -34,6 +36,15 @@ class UnityAutoGraderApp {
             canvasAuthForm.addEventListener('submit', (e) => {
                 e.preventDefault();
                 this.authenticateCanvas();
+            });
+        }
+
+        // API Key Form
+        const apiKeyForm = document.getElementById('api-key-form-element');
+        if (apiKeyForm) {
+            apiKeyForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.saveAPIKey();
             });
         }
 
@@ -93,6 +104,9 @@ class UnityAutoGraderApp {
             case 'grading':
                 this.loadGradingPanel();
                 break;
+            case 'settings':
+                this.loadSettingsPanel();
+                break;
         }
     }
 
@@ -109,31 +123,32 @@ class UnityAutoGraderApp {
         }
     }
 
-    async checkClaudeCodeStatus() {
+    async checkLLMStatus() {
         try {
-            const status = await window.electronAPI.claudeCode.getAnalysisResult('status');
-            this.claudeCodeAvailable = status && status.isAvailable;
+            const status = await window.electronAPI.llm.getAnalysisResult('status');
+            this.llmAvailable = status && status.isAvailable;
 
-            const statusElement = document.getElementById('claude-status');
-            const indicatorElement = document.getElementById('claude-indicator');
+            const statusElement = document.getElementById('llm-status');
+            const indicatorElement = document.getElementById('llm-indicator');
 
-            if (this.claudeCodeAvailable) {
-                statusElement.textContent = 'Claude Code is available and ready for AI-powered grading.';
+            if (this.llmAvailable) {
+                const providerName = status.providerName || 'LLM Provider';
+                statusElement.textContent = `${providerName} is configured and ready for AI-powered grading.`;
                 indicatorElement.className = 'status-indicator status-connected';
                 indicatorElement.textContent = 'Available';
             } else {
-                statusElement.textContent = 'Claude Code not found. Grading will use basic code analysis only. Install Claude Desktop for AI grading features.';
+                statusElement.textContent = 'No LLM provider configured. Grading will use basic code analysis only. Configure an API key in Settings for AI grading features.';
                 indicatorElement.className = 'status-indicator status-disconnected';
                 indicatorElement.textContent = 'Not Available';
             }
         } catch (error) {
-            console.error('Error checking Claude Code status:', error);
-            this.claudeCodeAvailable = false;
+            console.error('Error checking LLM status:', error);
+            this.llmAvailable = false;
 
-            const statusElement = document.getElementById('claude-status');
-            const indicatorElement = document.getElementById('claude-indicator');
+            const statusElement = document.getElementById('llm-status');
+            const indicatorElement = document.getElementById('llm-indicator');
 
-            statusElement.textContent = 'Unable to check Claude Code status. Grading will use basic analysis.';
+            statusElement.textContent = 'Unable to check LLM status. Grading will use basic analysis.';
             indicatorElement.className = 'status-indicator status-disconnected';
             indicatorElement.textContent = 'Unknown';
         }
@@ -419,9 +434,12 @@ class UnityAutoGraderApp {
             document.getElementById('start-grading-btn').disabled = true;
             document.getElementById('cancel-grading-btn').style.display = 'inline-block';
 
-            // Get criteria for grading
+            // Get criteria for grading and ensure it's serializable
             const criteriaTemplates = await window.electronAPI.store.get('criteria.templates') || [];
-            const criteria = criteriaTemplates.length > 0 ? criteriaTemplates[0] : this.getDefaultCriteria();
+            const rawCriteria = criteriaTemplates.length > 0 ? criteriaTemplates[0] : this.getDefaultCriteria();
+
+            // Create a clean, serializable criteria object
+            const criteria = JSON.parse(JSON.stringify(rawCriteria));
 
             // Start grading process
             this.activeGradingSession = {
@@ -599,8 +617,14 @@ class UnityAutoGraderApp {
                         // Use the clean URL for grading
                         const gradingResult = await this.gradeUnityProject(validation.cleanUrl, this.activeGradingSession.criteria);
 
+                        // Create serializable result object
                         results.push({
-                            submission: submission,
+                            submission: {
+                                id: submission.id,
+                                user_id: submission.user_id,
+                                assignment_id: submission.assignment_id,
+                                submitted_at: submission.submitted_at
+                            },
                             githubUrl: validation.cleanUrl,
                             originalUrl: githubUrl,
                             grade: gradingResult,
@@ -610,7 +634,12 @@ class UnityAutoGraderApp {
                     } else {
                         // Flag for instructor intervention
                         results.push({
-                            submission: submission,
+                            submission: {
+                                id: submission.id,
+                                user_id: submission.user_id,
+                                assignment_id: submission.assignment_id,
+                                submitted_at: submission.submitted_at
+                            },
                             githubUrl: githubUrl,
                             error: `Invalid GitHub URL: ${validation.reason}`,
                             needsInstructorIntervention: true,
@@ -621,7 +650,12 @@ class UnityAutoGraderApp {
                     }
                 } else {
                     results.push({
-                        submission: submission,
+                        submission: {
+                            id: submission.id,
+                            user_id: submission.user_id,
+                            assignment_id: submission.assignment_id,
+                            submitted_at: submission.submitted_at
+                        },
                         error: 'No GitHub URL found in submission attachments',
                         needsInstructorIntervention: true,
                         studentName: submission.user?.name || 'Unknown',
@@ -635,7 +669,12 @@ class UnityAutoGraderApp {
             } catch (error) {
                 console.error(`Error grading submission ${i + 1}:`, error);
                 results.push({
-                    submission: submission,
+                    submission: {
+                        id: submission.id,
+                        user_id: submission.user_id,
+                        assignment_id: submission.assignment_id,
+                        submitted_at: submission.submitted_at
+                    },
                     error: error.message,
                     studentName: submission.user?.name || 'Unknown',
                     userId: submission.user_id
@@ -726,8 +765,18 @@ class UnityAutoGraderApp {
 
     async gradeUnityProject(githubUrl, criteria) {
         try {
-            // Get assignment details if available
-            const assignmentDetails = this.currentAssignment?.assignmentDetails || null;
+            // Get assignment details if available and serialize only needed fields
+            let assignmentDetails = null;
+            if (this.currentAssignment?.assignmentDetails) {
+                const assignment = this.currentAssignment.assignmentDetails;
+                assignmentDetails = {
+                    name: assignment.name || '',
+                    description: assignment.description || '',
+                    due_at: assignment.due_at || null,
+                    points_possible: assignment.points_possible || null,
+                    id: assignment.id || null
+                };
+            }
 
             // Call the grader to analyze the project with assignment context
             const result = await window.electronAPI.grader.analyzeProject(githubUrl, criteria, assignmentDetails);
@@ -1055,14 +1104,14 @@ class UnityAutoGraderApp {
 
     loadGradingPanel() {
         const startBtn = document.getElementById('start-grading-btn');
-        startBtn.disabled = !this.canvasConnected || !this.claudeCodeAvailable;
+        startBtn.disabled = !this.canvasConnected || !this.llmAvailable;
 
         if (!this.canvasConnected) {
             document.getElementById('grading-progress').innerHTML =
                 '<p>Canvas connection required for grading. Please connect in the Canvas Setup section.</p>';
-        } else if (!this.claudeCodeAvailable) {
+        } else if (!this.llmAvailable) {
             document.getElementById('grading-progress').innerHTML =
-                '<p>Claude Code integration is not available. Please check your Claude Code installation.</p>';
+                '<p>LLM integration is not available. Please configure an API key in Settings for AI-powered grading.</p>';
         }
     }
 
@@ -1350,6 +1399,366 @@ class UnityAutoGraderApp {
         }
     }
 
+    // API Key Management Methods
+    async loadSettingsPanel() {
+        await this.loadSupportedProviders();
+        await this.loadAPIKeys();
+    }
+
+    async loadSupportedProviders() {
+        try {
+            const result = await window.electronAPI.apiKeys.getProviders();
+            if (result.success) {
+                this.supportedProviders = result.providers;
+            }
+        } catch (error) {
+            console.error('Error loading supported providers:', error);
+        }
+    }
+
+    async loadAPIKeys() {
+        try {
+            const result = await window.electronAPI.apiKeys.getAll();
+            if (result.success) {
+                this.displayAPIKeys(result.keys);
+            } else {
+                this.showToast(`Error loading API keys: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            this.showToast(`Error loading API keys: ${error.message}`, 'error');
+        }
+    }
+
+    displayAPIKeys(apiKeys) {
+        const apiKeysList = document.getElementById('api-keys-list');
+
+        if (!apiKeys || Object.keys(apiKeys).length === 0) {
+            apiKeysList.innerHTML = '<p style="opacity: 0.7;">No API keys configured. Add your first API key above.</p>';
+            return;
+        }
+
+        let html = '<div style="display: grid; gap: 16px;">';
+
+        for (const [provider, config] of Object.entries(apiKeys)) {
+            const providerInfo = config.providerInfo;
+            const statusBadge = config.isActive
+                ? '<span style="background: #2ecc71; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px;">Active</span>'
+                : '<span style="background: #95a5a6; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px;">Inactive</span>';
+
+            const lastUsed = config.lastUsed
+                ? new Date(config.lastUsed).toLocaleDateString()
+                : 'Never';
+
+            const createdAt = config.createdAt
+                ? new Date(config.createdAt).toLocaleDateString()
+                : 'Unknown';
+
+            html += `
+                <div class="card" style="background: rgba(255,255,255,0.05);">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                        <div>
+                            <h4 style="margin: 0; display: flex; align-items: center; gap: 8px;">
+                                ${providerInfo.name}
+                                ${statusBadge}
+                            </h4>
+                            <p style="margin: 4px 0; opacity: 0.8; font-size: 14px;">
+                                API Key: ${config.apiKey || 'Not set'}
+                            </p>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-secondary" onclick="app.editAPIKey('${provider}')" style="font-size: 12px; padding: 6px 12px;">Edit</button>
+                            <button class="btn btn-secondary" onclick="app.testAPIKey('${provider}')" style="font-size: 12px; padding: 6px 12px;">Test</button>
+                            <button class="btn btn-secondary" onclick="app.toggleAPIKey('${provider}', ${!config.isActive})" style="font-size: 12px; padding: 6px 12px;">
+                                ${config.isActive ? 'Deactivate' : 'Activate'}
+                            </button>
+                            <button class="btn btn-secondary" onclick="app.deleteAPIKey('${provider}')" style="font-size: 12px; padding: 6px 12px; background: rgba(231, 76, 60, 0.2); border-color: #e74c3c;">Delete</button>
+                        </div>
+                    </div>
+                    <div style="font-size: 12px; opacity: 0.6; display: flex; gap: 16px;">
+                        <span>Created: ${createdAt}</span>
+                        <span>Last Used: ${lastUsed}</span>
+                        ${config.endpoint ? `<span>Endpoint: ${config.endpoint}</span>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        html += '</div>';
+        apiKeysList.innerHTML = html;
+    }
+
+    showAddAPIKeyForm() {
+        this.currentEditingProvider = null;
+        document.getElementById('api-form-title').textContent = 'Add New API Key';
+        document.getElementById('api-key-form').style.display = 'block';
+        this.resetAPIKeyForm();
+    }
+
+    hideAPIKeyForm() {
+        document.getElementById('api-key-form').style.display = 'none';
+        this.resetAPIKeyForm();
+        this.currentEditingProvider = null;
+    }
+
+    resetAPIKeyForm() {
+        document.getElementById('api-provider').value = '';
+        document.getElementById('api-key-input').value = '';
+        document.getElementById('api-endpoint').value = '';
+        document.getElementById('api-deployment').value = '';
+        document.getElementById('api-is-active').checked = true;
+        this.onProviderChange();
+    }
+
+    onProviderChange() {
+        const provider = document.getElementById('api-provider').value;
+        const additionalFields = document.getElementById('additional-fields');
+        const endpointField = document.getElementById('endpoint-field');
+        const deploymentField = document.getElementById('deployment-field');
+
+        // Hide all additional fields first
+        additionalFields.style.display = 'none';
+        endpointField.style.display = 'none';
+        deploymentField.style.display = 'none';
+
+        if (!provider) return;
+
+        const providerInfo = this.supportedProviders[provider];
+        if (!providerInfo) return;
+
+        if (providerInfo.fields.includes('endpoint')) {
+            additionalFields.style.display = 'block';
+            endpointField.style.display = 'block';
+
+            if (provider === 'azure') {
+                document.getElementById('api-endpoint').placeholder = 'https://your-resource.openai.azure.com';
+            } else if (provider === 'custom') {
+                document.getElementById('api-endpoint').placeholder = 'https://your-api-endpoint.com';
+            }
+        }
+
+        if (providerInfo.fields.includes('deploymentName')) {
+            additionalFields.style.display = 'block';
+            deploymentField.style.display = 'block';
+        }
+    }
+
+    async saveAPIKey() {
+        const provider = document.getElementById('api-provider').value;
+        const apiKey = document.getElementById('api-key-input').value.trim();
+        const endpoint = document.getElementById('api-endpoint').value.trim();
+        const deployment = document.getElementById('api-deployment').value.trim();
+        const isActive = document.getElementById('api-is-active').checked;
+
+        if (!provider) {
+            this.showToast('Please select a provider', 'warning');
+            return;
+        }
+
+        if (!apiKey) {
+            this.showToast('Please enter an API key', 'warning');
+            return;
+        }
+
+        const config = {
+            apiKey,
+            isActive
+        };
+
+        const providerInfo = this.supportedProviders[provider];
+        if (providerInfo && providerInfo.fields.includes('endpoint')) {
+            if (!endpoint) {
+                this.showToast('Please enter an endpoint URL', 'warning');
+                return;
+            }
+            config.endpoint = endpoint;
+        }
+
+        if (providerInfo && providerInfo.fields.includes('deploymentName')) {
+            if (!deployment) {
+                this.showToast('Please enter a deployment name', 'warning');
+                return;
+            }
+            config.deploymentName = deployment;
+        }
+
+        try {
+            this.showToast('Saving API key...', 'info');
+            // Ensure config is serializable
+            const serializableConfig = JSON.parse(JSON.stringify(config));
+            const result = await window.electronAPI.apiKeys.set(provider, serializableConfig);
+
+            if (result.success) {
+                this.showToast(result.message, 'success');
+                this.hideAPIKeyForm();
+                await this.loadAPIKeys();
+
+                // Refresh LLM status since we may have just activated a new provider
+                await this.refreshLLMStatus();
+            } else {
+                this.showToast(`Error saving API key: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            this.showToast(`Error saving API key: ${error.message}`, 'error');
+        }
+    }
+
+    async editAPIKey(provider) {
+        try {
+            const result = await window.electronAPI.apiKeys.get(provider);
+            if (result.success && result.keyData) {
+                this.currentEditingProvider = provider;
+                const keyData = result.keyData;
+
+                document.getElementById('api-form-title').textContent = `Edit ${this.supportedProviders[provider].name} API Key`;
+                document.getElementById('api-provider').value = provider;
+                document.getElementById('api-key-input').value = keyData.apiKey || '';
+                document.getElementById('api-endpoint').value = keyData.endpoint || '';
+                document.getElementById('api-deployment').value = keyData.deploymentName || '';
+                document.getElementById('api-is-active').checked = keyData.isActive !== false;
+
+                this.onProviderChange();
+                document.getElementById('api-key-form').style.display = 'block';
+            }
+        } catch (error) {
+            this.showToast(`Error loading API key: ${error.message}`, 'error');
+        }
+    }
+
+    async deleteAPIKey(provider) {
+        const providerName = this.supportedProviders[provider]?.name || provider;
+
+        if (!confirm(`Are you sure you want to delete the API key for ${providerName}?`)) {
+            return;
+        }
+
+        try {
+            const result = await window.electronAPI.apiKeys.delete(provider);
+            if (result.success) {
+                this.showToast(result.message, 'success');
+                await this.loadAPIKeys();
+            } else {
+                this.showToast(`Error deleting API key: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            this.showToast(`Error deleting API key: ${error.message}`, 'error');
+        }
+    }
+
+    async testAPIKey(provider) {
+        try {
+            this.showToast('Testing API key...', 'info');
+            const result = await window.electronAPI.apiKeys.test(provider);
+
+            if (result.success) {
+                let message = result.message;
+                if (result.models && result.models.length > 0) {
+                    message += ` (Models: ${result.models.slice(0, 3).join(', ')})`;
+                }
+                this.showToast(message, 'success');
+            } else {
+                this.showToast(`API key test failed: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            this.showToast(`Error testing API key: ${error.message}`, 'error');
+        }
+    }
+
+    async testCurrentAPIKey() {
+        const provider = document.getElementById('api-provider').value;
+        const apiKey = document.getElementById('api-key-input').value.trim();
+        const endpoint = document.getElementById('api-endpoint').value.trim();
+        const deployment = document.getElementById('api-deployment').value.trim();
+
+        if (!provider || !apiKey) {
+            this.showToast('Please fill in the provider and API key fields first', 'warning');
+            return;
+        }
+
+        const config = { apiKey };
+
+        const providerInfo = this.supportedProviders[provider];
+        if (providerInfo && providerInfo.fields.includes('endpoint') && endpoint) {
+            config.endpoint = endpoint;
+        }
+        if (providerInfo && providerInfo.fields.includes('deploymentName') && deployment) {
+            config.deploymentName = deployment;
+        }
+
+        try {
+            this.showToast('Testing API key...', 'info');
+            // Ensure config is serializable
+            const serializableConfig = JSON.parse(JSON.stringify(config));
+            const result = await window.electronAPI.apiKeys.test(provider, serializableConfig);
+
+            if (result.success) {
+                let message = result.message;
+                if (result.models && result.models.length > 0) {
+                    message += ` (Models: ${result.models.slice(0, 3).join(', ')})`;
+                }
+                this.showToast(message, 'success');
+            } else {
+                this.showToast(`API key test failed: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            this.showToast(`Error testing API key: ${error.message}`, 'error');
+        }
+    }
+
+    async toggleAPIKey(provider, isActive) {
+        try {
+            const result = await window.electronAPI.apiKeys.toggle(provider, isActive);
+            if (result.success) {
+                const action = isActive ? 'activated' : 'deactivated';
+                this.showToast(`${this.supportedProviders[provider].name} ${action}`, 'success');
+                await this.loadAPIKeys();
+            } else {
+                this.showToast(`Error toggling API key: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            this.showToast(`Error toggling API key: ${error.message}`, 'error');
+        }
+    }
+
+    async exportAPIKeyConfig() {
+        try {
+            const result = await window.electronAPI.apiKeys.exportConfig();
+            if (result.success) {
+                const config = result.config;
+                const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `api-keys-config-${new Date().toISOString().slice(0, 10)}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                this.showToast('API key configuration exported successfully', 'success');
+            } else {
+                this.showToast(`Error exporting configuration: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            this.showToast(`Error exporting configuration: ${error.message}`, 'error');
+        }
+    }
+
+    async refreshLLMStatus() {
+        try {
+            this.showToast('Refreshing LLM status...', 'info');
+
+            // Refresh the provider
+            await window.electronAPI.llm.refreshProvider();
+
+            // Check status again
+            await this.checkLLMStatus();
+
+            this.showToast('LLM status refreshed', 'success');
+        } catch (error) {
+            this.showToast(`Error refreshing LLM status: ${error.message}`, 'error');
+        }
+    }
+
     showToast(message, type = 'info') {
         const toast = document.getElementById('toast');
         toast.textContent = message;
@@ -1373,7 +1782,7 @@ window.gradeAssignment = (courseId, assignmentId) => window.app.gradeAssignment(
 window.startBatchGrading = () => window.app.startBatchGrading();
 window.cancelGrading = () => window.app.resetGradingUI();
 window.exportResults = (format) => window.app.exportResults(format);
-window.checkClaudeCode = () => window.app.checkClaudeCodeStatus();
+window.refreshLLMStatus = () => window.app.refreshLLMStatus();
 window.filterResults = (filter) => window.app.filterResults(filter);
 window.openCanvasGradebook = () => window.app.openCanvasGradebook();
 window.clearAndLoadNewRubric = () => window.app.clearAndLoadNewRubric();

@@ -48,15 +48,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
     listFiles: (path, pattern) => ipcRenderer.invoke('files-list-files', path, pattern)
   },
 
-  claudeCode: {
-    analyzeCode: (code, criteria, context) => ipcRenderer.invoke('claude-code-analyze', code, criteria, context),
-    getAnalysisResult: (taskId) => ipcRenderer.invoke('claude-code-get-result', taskId)
+  llm: {
+    analyzeCode: (code, criteria, context) => ipcRenderer.invoke('llm-analyze', code, criteria, context),
+    getAnalysisResult: (taskId) => ipcRenderer.invoke('llm-get-result', taskId),
+    refreshProvider: () => ipcRenderer.invoke('llm-refresh-provider')
   },
 
   export: {
     toCsv: (data, filename) => ipcRenderer.invoke('export-to-csv', data, filename),
     toPdf: (data, filename) => ipcRenderer.invoke('export-to-pdf', data, filename),
     toJson: (data, filename) => ipcRenderer.invoke('export-to-json', data, filename)
+  },
+
+  apiKeys: {
+    getProviders: () => ipcRenderer.invoke('api-keys-get-providers'),
+    getAll: () => ipcRenderer.invoke('api-keys-get-all'),
+    set: (provider, config) => ipcRenderer.invoke('api-keys-set', provider, config),
+    get: (provider) => ipcRenderer.invoke('api-keys-get', provider),
+    delete: (provider) => ipcRenderer.invoke('api-keys-delete', provider),
+    test: (provider, config) => ipcRenderer.invoke('api-keys-test', provider, config),
+    toggle: (provider, isActive) => ipcRenderer.invoke('api-keys-toggle', provider, isActive),
+    getActive: () => ipcRenderer.invoke('api-keys-get-active'),
+    exportConfig: () => ipcRenderer.invoke('api-keys-export-config'),
+    clearAll: () => ipcRenderer.invoke('api-keys-clear-all')
   },
 
   onAppError: (callback) => {

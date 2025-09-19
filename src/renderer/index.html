@@ -473,9 +473,9 @@
                             <button class="btn btn-secondary" onclick="showPanel('criteria')">Manage Criteria</button>
                         </div>
                         <div class="card">
-                            <h3>Claude Code Status</h3>
-                            <p id="claude-status">Checking Claude Code availability...</p>
-                            <div class="status-indicator status-loading" id="claude-indicator">
+                            <h3>AI Grading Status</h3>
+                            <p id="llm-status">Checking LLM provider availability...</p>
+                            <div class="status-indicator status-loading" id="llm-indicator">
                                 Checking...
                             </div>
                         </div>
@@ -643,11 +643,81 @@
                     <p>Configure application settings</p>
                 </div>
                 <div class="content-area">
+                    <!-- API Key Management Section -->
+                    <div class="card">
+                        <h3>🔑 API Key Management</h3>
+                        <p>Configure API keys for various Large Language Model providers</p>
+
+                        <div style="display: flex; gap: 12px; margin-bottom: 20px;">
+                            <button class="btn" onclick="app.showAddAPIKeyForm()">+ Add New API Key</button>
+                            <button class="btn btn-secondary" onclick="app.loadAPIKeys()">Refresh</button>
+                            <button class="btn btn-secondary" onclick="app.exportAPIKeyConfig()">Export Config</button>
+                        </div>
+
+                        <!-- Add/Edit API Key Form (Initially Hidden) -->
+                        <div id="api-key-form" style="display: none; background: rgba(255,255,255,0.05); padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                            <h4 id="api-form-title">Add New API Key</h4>
+                            <form id="api-key-form-element">
+                                <div class="grid-2">
+                                    <div class="form-group">
+                                        <label class="form-label" for="api-provider">Provider</label>
+                                        <select class="form-input" id="api-provider" onchange="app.onProviderChange()">
+                                            <option value="">Select a provider...</option>
+                                            <option value="openai">OpenAI (GPT-4, GPT-3.5)</option>
+                                            <option value="anthropic">Anthropic (Claude)</option>
+                                            <option value="google">Google AI (Gemini)</option>
+                                            <option value="cohere">Cohere</option>
+                                            <option value="huggingface">Hugging Face</option>
+                                            <option value="azure">Azure OpenAI</option>
+                                            <option value="custom">Custom LLM API</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label" for="api-key-input">API Key *</label>
+                                        <input type="password" class="form-input" id="api-key-input" placeholder="Enter your API key..." required>
+                                    </div>
+                                </div>
+
+                                <!-- Additional fields (shown based on provider) -->
+                                <div id="additional-fields" style="display: none;">
+                                    <div class="grid-2">
+                                        <div class="form-group" id="endpoint-field" style="display: none;">
+                                            <label class="form-label" for="api-endpoint">Endpoint URL *</label>
+                                            <input type="url" class="form-input" id="api-endpoint" placeholder="https://your-api-endpoint.com">
+                                        </div>
+                                        <div class="form-group" id="deployment-field" style="display: none;">
+                                            <label class="form-label" for="api-deployment">Deployment Name *</label>
+                                            <input type="text" class="form-input" id="api-deployment" placeholder="your-deployment-name">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label">
+                                        <input type="checkbox" id="api-is-active" checked style="margin-right: 8px;">
+                                        Set as active provider
+                                    </label>
+                                </div>
+
+                                <div style="display: flex; gap: 12px; margin-top: 16px;">
+                                    <button type="submit" class="btn">Save API Key</button>
+                                    <button type="button" class="btn btn-secondary" onclick="app.testCurrentAPIKey()">Test Connection</button>
+                                    <button type="button" class="btn btn-secondary" onclick="app.hideAPIKeyForm()">Cancel</button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- API Keys List -->
+                        <div id="api-keys-list">
+                            <p>Loading API keys...</p>
+                        </div>
+                    </div>
+
                     <div class="grid-2">
                         <div class="card">
-                            <h3>Claude Code Integration</h3>
-                            <p>Settings for Claude Code integration</p>
-                            <button class="btn btn-secondary" onclick="checkClaudeCode()">Check Claude Code</button>
+                            <h3>AI Grading Integration</h3>
+                            <p>Settings for LLM-powered grading</p>
+                            <button class="btn btn-secondary" onclick="refreshLLMStatus()">Refresh Status</button>
                         </div>
                         <div class="card">
                             <h3>Application</h3>
