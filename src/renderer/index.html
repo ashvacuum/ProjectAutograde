@@ -401,30 +401,44 @@
             overflow-x: hidden;
         }
 
+        /* Grading panel scrollable area */
+        #grading-panel .content-area {
+            max-height: calc(100vh - 120px);
+            overflow-y: auto;
+        }
+
         /* Custom scrollbar styling */
         #assignments-list::-webkit-scrollbar,
         #criteria-templates::-webkit-scrollbar,
-        #results-table::-webkit-scrollbar {
+        #results-table::-webkit-scrollbar,
+        #grading-panel .content-area::-webkit-scrollbar,
+        .content-area::-webkit-scrollbar {
             width: 8px;
         }
 
         #assignments-list::-webkit-scrollbar-track,
         #criteria-templates::-webkit-scrollbar-track,
-        #results-table::-webkit-scrollbar-track {
+        #results-table::-webkit-scrollbar-track,
+        #grading-panel .content-area::-webkit-scrollbar-track,
+        .content-area::-webkit-scrollbar-track {
             background: rgba(255, 255, 255, 0.1);
             border-radius: 4px;
         }
 
         #assignments-list::-webkit-scrollbar-thumb,
         #criteria-templates::-webkit-scrollbar-thumb,
-        #results-table::-webkit-scrollbar-thumb {
+        #results-table::-webkit-scrollbar-thumb,
+        #grading-panel .content-area::-webkit-scrollbar-thumb,
+        .content-area::-webkit-scrollbar-thumb {
             background: rgba(255, 255, 255, 0.3);
             border-radius: 4px;
         }
 
         #assignments-list::-webkit-scrollbar-thumb:hover,
         #criteria-templates::-webkit-scrollbar-thumb:hover,
-        #results-table::-webkit-scrollbar-thumb:hover {
+        #results-table::-webkit-scrollbar-thumb:hover,
+        #grading-panel .content-area::-webkit-scrollbar-thumb:hover,
+        .content-area::-webkit-scrollbar-thumb:hover {
             background: rgba(255, 255, 255, 0.5);
         }
     </style>
