@@ -141,10 +141,54 @@ class CanvasAPI {
     const matches = text.match(githubRegex);
 
     if (matches && matches.length > 0) {
-      return matches[0].replace(/[.,;)]*$/, '');
+      let url = matches[0];
+
+      // Remove trailing punctuation
+      url = url.replace(/[.,;)]*$/, '');
+
+      // Clean and normalize the URL
+      url = this.cleanGithubUrl(url);
+
+      return url;
     }
 
     return null;
+  }
+
+  cleanGithubUrl(url) {
+    if (!url) return url;
+
+    try {
+      // Parse the URL
+      const urlObj = new URL(url);
+
+      // Remove query parameters and fragments
+      urlObj.search = '';
+      urlObj.hash = '';
+
+      // Get the cleaned URL
+      let cleanedUrl = urlObj.toString();
+
+      // Remove trailing slashes
+      cleanedUrl = cleanedUrl.replace(/\/+$/, '');
+
+      // Remove .git suffix if present
+      cleanedUrl = cleanedUrl.replace(/\.git$/, '');
+
+      // Remove /tree/branch or /blob/branch paths - keep just the repo root
+      cleanedUrl = cleanedUrl.replace(/\/(tree|blob|commit|issues|pull|releases|wiki)\/.*$/, '');
+
+      console.log(`🧹 Cleaned URL: ${url} → ${cleanedUrl}`);
+
+      return cleanedUrl;
+    } catch (error) {
+      console.warn(`⚠️ Failed to parse URL: ${url}`, error);
+      // If URL parsing fails, just do basic cleanup
+      return url
+        .replace(/[?#].*$/, '') // Remove query string and fragment
+        .replace(/\/+$/, '') // Remove trailing slashes
+        .replace(/\.git$/, ''); // Remove .git suffix
+    }
   }
 
   async postGrade(courseId, assignmentId, userId, grade, comment = '') {

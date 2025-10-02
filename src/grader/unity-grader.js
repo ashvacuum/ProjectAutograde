@@ -54,11 +54,44 @@ class UnityGrader {
 
       this.currentProject = cloneResult.path;
 
-      // Validate it's a Unity project
-      const validation = await this.gitCommands.validateUnityProject(cloneResult.path);
+      // Validate it's a Unity project - first check root, then subdirectories
+      console.log('🔍 Checking for Unity project...');
+      let projectPath = cloneResult.path;
+      let validation = await this.gitCommands.validateUnityProject(projectPath);
+
+      if (!validation.isValidUnityProject) {
+        console.log('❌ Not a Unity project at root, searching subdirectories...');
+
+        // Search for Unity project in subdirectories
+        const subDirectories = await this.findSubDirectories(cloneResult.path);
+        console.log(`📂 Found ${subDirectories.length} subdirectories to check`);
+
+        for (const subDir of subDirectories) {
+          const subPath = path.join(cloneResult.path, subDir);
+          console.log(`   Checking: ${subDir}`);
+          const subValidation = await this.gitCommands.validateUnityProject(subPath);
+
+          if (subValidation.isValidUnityProject) {
+            console.log(`✅ Found Unity project in subdirectory: ${subDir}`);
+            validation = subValidation;
+            projectPath = subPath;
+            this.currentProject = projectPath;
+            break;
+          }
+        }
+      } else {
+        console.log('✅ Unity project found at repository root');
+      }
+
       if (!validation.isValidUnityProject) {
         await this.cleanup(cloneResult.path);
-        return this.createFailedAnalysis(repoUrl, 'Not a valid Unity project', 0, true, 'invalid_project');
+        return this.createFailedAnalysis(
+          repoUrl,
+          'Not a valid Unity project. Checked root and subdirectories.',
+          0,
+          true,
+          'invalid_project'
+        );
       }
 
       // If we have warnings but it's still a valid project, continue
@@ -66,12 +99,12 @@ class UnityGrader {
         console.warn(`Unity project warnings for ${repoUrl}:`, validation.warnings);
       }
 
-      // Perform the actual analysis
-      const projectStructure = await this.analyzeProjectStructure(cloneResult.path);
-      const csharpFiles = await this.findCSharpFiles(cloneResult.path);
+      // Perform the actual analysis (use the correct projectPath which may be a subdirectory)
+      const projectStructure = await this.analyzeProjectStructure(projectPath);
+      const csharpFiles = await this.findCSharpFiles(projectPath);
       const codeAnalysis = await this.analyzeCSharpCode(csharpFiles);
-      const unitySpecific = await this.analyzeUnitySpecifics(cloneResult.path);
-      const gitInfo = await this.gitCommands.getRepositoryInfo(cloneResult.path);
+      const unitySpecific = await this.analyzeUnitySpecifics(projectPath);
+      const gitInfo = await this.gitCommands.getRepositoryInfo(projectPath);
 
       const analysis = {
         repoUrl,
@@ -153,6 +186,22 @@ class UnityGrader {
       return await this.gitCommands.findCSharpFiles(projectPath);
     } catch (error) {
       console.error('Error finding C# files:', error);
+      return [];
+    }
+  }
+
+  async findSubDirectories(basePath) {
+    try {
+      const items = await fs.readdir(basePath, { withFileTypes: true });
+      const directories = items
+        .filter(item => item.isDirectory())
+        .filter(item => !item.name.startsWith('.')) // Skip hidden directories
+        .filter(item => item.name !== 'node_modules') // Skip common non-Unity directories
+        .map(item => item.name);
+
+      return directories;
+    } catch (error) {
+      console.error('Error finding subdirectories:', error);
       return [];
     }
   }
