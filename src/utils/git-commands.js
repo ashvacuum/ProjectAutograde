@@ -34,8 +34,10 @@ class GitCommands {
       return false;
     }
 
-    const githubRegex = /^https?:\/\/github\.com\/[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+\/?$/;
-    return githubRegex.test(url.replace(/\.git$/, ''));
+    // More permissive regex that handles various GitHub URL formats
+    const githubRegex = /^https?:\/\/(www\.)?github\.com\/[\w.-]+\/[\w.-]+/;
+    const cleanUrl = url.replace(/\.git$/, '').trim();
+    return githubRegex.test(cleanUrl);
   }
 
   async checkGitInstallation() {

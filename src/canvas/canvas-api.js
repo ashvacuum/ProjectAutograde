@@ -110,13 +110,15 @@ class CanvasAPI {
         return {
           id: submission.id,
           user_id: submission.user_id,
-          user_name: submission.user?.name || 'Unknown User',
+          user: submission.user || { name: 'Unknown User', id: submission.user_id },
           submitted_at: submission.submitted_at,
           github_url: githubUrl,
+          githubUrl: githubUrl,
           score: submission.score,
           grade: submission.grade,
           workflow_state: submission.workflow_state,
-          submission_comments: submission.submission_comments || []
+          submission_comments: submission.submission_comments || [],
+          attachments: submission.attachments || []
         };
       });
 

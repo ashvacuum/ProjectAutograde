@@ -53,9 +53,24 @@ class CanvasAuth {
 
   async loadStoredCredentials() {
     try {
-      const apiUrl = this.store.get('canvas.apiUrl');
-      const token = this.store.get('canvas.token');
+      // First check electron-store
+      let apiUrl = this.store.get('canvas.apiUrl');
+      let token = this.store.get('canvas.token');
       const authenticatedAt = this.store.get('canvas.authenticatedAt');
+
+      // Fallback to environment variables if not in store
+      if (!apiUrl && process.env.CANVAS_API_URL) {
+        apiUrl = process.env.CANVAS_API_URL;
+        console.log('📁 Using Canvas API URL from .env file');
+      }
+
+      if (!token) {
+        // Support both CANVAS_TOKEN and CANVAS_API_KEY
+        token = process.env.CANVAS_TOKEN || process.env.CANVAS_API_KEY;
+        if (token) {
+          console.log('📁 Using Canvas API token from .env file');
+        }
+      }
 
       if (!apiUrl || !token) {
         return {
@@ -133,8 +148,8 @@ class CanvasAuth {
     try {
       const urlObj = new URL(url);
       return urlObj.protocol === 'https:' &&
-             urlObj.hostname.includes('instructure.com') ||
-             urlObj.hostname.includes('canvas.');
+             (urlObj.hostname.includes('instructure.com') ||
+              urlObj.hostname.includes('canvas.'));
     } catch (error) {
       return false;
     }
