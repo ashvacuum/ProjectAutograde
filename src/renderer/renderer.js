@@ -2230,51 +2230,153 @@ class UnityAutoGraderApp {
         const result = this.gradingResults[index];
         if (!result) return;
 
-        let detailsHtml = `
-            <h3>Detailed Results: ${result.studentName}</h3>
-            <div style="background: rgba(255,255,255,0.1); padding: 16px; border-radius: 8px; margin: 16px 0;">
-        `;
+        const modal = document.getElementById('details-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalBody = document.getElementById('modal-body');
 
+        modalTitle.textContent = `Grading Details: ${result.studentName || 'Unknown Student'}`;
+
+        let detailsHtml = '';
+
+        // Error/Intervention Notice
         if (result.needsInstructorIntervention) {
             detailsHtml += `
-                <div style="background: rgba(231, 76, 60, 0.2); padding: 12px; border-radius: 4px; margin-bottom: 16px;">
-                    <strong>⚠️ Requires Instructor Review</strong><br>
-                    Reason: ${result.interventionReason}<br>
-                    ${result.error ? `Error: ${result.error}` : ''}
+                <div style="background: rgba(231, 76, 60, 0.2); padding: 16px; border-radius: 8px; margin-bottom: 16px; border-left: 4px solid #e74c3c;">
+                    <strong style="font-size: 16px;">⚠️ Requires Instructor Review</strong><br>
+                    <p style="margin: 8px 0 0 0; opacity: 0.9;">Reason: ${result.interventionReason || 'Unknown'}</p>
+                    ${result.error ? `<p style="margin: 8px 0 0 0; opacity: 0.9;">Error: ${result.error}</p>` : ''}
                 </div>
             `;
         }
 
+        // Grade Information
         if (result.grade && result.grade.result) {
             const grade = result.grade.result;
+
+            // Grade Summary
             detailsHtml += `
-                <h4>Overall Grade: ${grade.overallGrade}/50</h4>
-                <h5>Criteria Breakdown:</h5>
+                <div class="grade-summary">
+                    <div style="margin-bottom: 8px; opacity: 0.7; font-size: 14px;">Overall Grade</div>
+                    <div>
+                        <span class="main-grade">${grade.overallGrade}</span>
+                        <span class="max-grade">/ ${grade.maxPoints || 50}</span>
+                    </div>
+                </div>
             `;
 
+            // Late Penalty Notice
+            if (result.latePenalty && result.latePenalty.isLate) {
+                const penalty = result.latePenalty;
+                detailsHtml += `
+                    <div class="late-penalty-notice">
+                        <strong>⏰ Late Submission Penalty Applied</strong><br>
+                        <div style="margin-top: 8px;">
+                            Submitted ${penalty.daysLate} day${penalty.daysLate > 1 ? 's' : ''} late
+                            • ${penalty.penaltyPercentage}% deducted
+                            ${penalty.cappedAtMax ? ' (capped at maximum penalty)' : ''}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Criteria Breakdown
             if (grade.criteriaScores) {
+                detailsHtml += `<h3 style="margin: 24px 0 16px 0; font-size: 18px;">Criteria Breakdown</h3>`;
+
                 Object.entries(grade.criteriaScores).forEach(([key, criteria]) => {
+                    const criteriaName = criteria.rating || criteria.name || key.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    const percentage = criteria.maxScore > 0 ? Math.round((criteria.score / criteria.maxScore) * 100) : 0;
+
                     detailsHtml += `
-                        <div style="margin: 12px 0; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px;">
-                            <strong>${criteria.rating || key}:</strong> ${criteria.score}/${criteria.maxScore}<br>
-                            <em>${criteria.feedback}</em>
+                        <div class="criteria-card">
+                            <div class="criteria-header">
+                                <div class="criteria-title">${criteriaName}</div>
+                                <div class="criteria-score">${criteria.score}/${criteria.maxScore} <span style="font-size: 14px; opacity: 0.7;">(${percentage}%)</span></div>
+                            </div>
+
+                            <div class="criteria-feedback">
+                                ${criteria.feedback || 'No feedback provided'}
+                            </div>
+
+                            ${criteria.evidenceFound && criteria.evidenceFound.length > 0 ? `
+                                <div class="criteria-section">
+                                    <div class="criteria-section-title">✓ Evidence Found:</div>
+                                    <ul class="criteria-list">
+                                        ${criteria.evidenceFound.map(evidence => `<li>${evidence}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            ` : ''}
+
+                            ${criteria.improvementAreas && criteria.improvementAreas.length > 0 ? `
+                                <div class="criteria-section">
+                                    <div class="criteria-section-title">💡 Areas for Improvement:</div>
+                                    <ul class="criteria-list">
+                                        ${criteria.improvementAreas.map(area => `<li>${area}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            ` : ''}
                         </div>
                     `;
                 });
             }
 
+            // Overall Feedback
             if (grade.overallFeedback) {
                 detailsHtml += `
-                    <h5>Overall Feedback:</h5>
-                    <p>${grade.overallFeedback.detailedFeedback}</p>
+                    <div class="overall-feedback">
+                        <h3 style="margin: 0 0 12px 0; font-size: 18px;">Overall Feedback</h3>
+                        <div style="font-size: 14px; line-height: 1.6;">
+                            ${grade.overallFeedback.detailedFeedback || grade.overallFeedback.summary || grade.overallFeedback}
+                        </div>
+                        ${grade.overallFeedback.strengths ? `
+                            <div style="margin-top: 16px;">
+                                <strong style="font-size: 14px;">Strengths:</strong>
+                                <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9;">${grade.overallFeedback.strengths}</p>
+                            </div>
+                        ` : ''}
+                        ${grade.overallFeedback.weaknesses ? `
+                            <div style="margin-top: 16px;">
+                                <strong style="font-size: 14px;">Areas to Improve:</strong>
+                                <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9;">${grade.overallFeedback.weaknesses}</p>
+                            </div>
+                        ` : ''}
+                    </div>
                 `;
             }
+
+            // GitHub Link
+            if (result.githubUrl) {
+                detailsHtml += `
+                    <div style="margin-top: 24px; padding: 16px; background: rgba(255,255,255,0.05); border-radius: 8px;">
+                        <strong style="font-size: 14px;">Repository:</strong>
+                        <a href="${result.githubUrl}" target="_blank" style="color: var(--ciit-light); text-decoration: none; margin-left: 8px; font-size: 14px;">
+                            ${result.githubUrl}
+                        </a>
+                    </div>
+                `;
+            }
+        } else {
+            detailsHtml += `
+                <div style="padding: 40px; text-align: center; opacity: 0.7;">
+                    <p>No detailed grading information available for this submission.</p>
+                </div>
+            `;
         }
 
-        detailsHtml += `</div>`;
+        modalBody.innerHTML = detailsHtml;
+        modal.classList.add('show');
 
-        // For now, show in a toast - in a real app, this would be a modal
-        this.showToast('Detailed view would open in a modal window', 'info');
+        // Close on background click
+        modal.onclick = (e) => {
+            if (e.target === modal) {
+                this.closeDetailsModal();
+            }
+        };
+    }
+
+    closeDetailsModal() {
+        const modal = document.getElementById('details-modal');
+        modal.classList.remove('show');
     }
 
     filterResults(filter) {
