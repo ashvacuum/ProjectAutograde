@@ -5,6 +5,41 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Unity Auto-Grader</title>
     <style>
+        /* Theme Variables */
+        :root {
+            --ciit-primary: #00364D;
+            --ciit-secondary: #005073;
+            --ciit-tertiary: #006994;
+            --ciit-accent: #0088CC;
+            --ciit-light: #00A8E8;
+            --ciit-dark: #001F2E;
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.8);
+            --overlay-light: rgba(255, 255, 255, 0.1);
+            --overlay-medium: rgba(255, 255, 255, 0.15);
+            --overlay-dark: rgba(0, 0, 0, 0.3);
+        }
+
+        /* Discord Dark Theme */
+        [data-theme="discord"] {
+            --ciit-primary: #667eea;
+            --ciit-secondary: #764ba2;
+            --ciit-tertiary: #7c5dfa;
+            --ciit-accent: #8b73ff;
+            --ciit-light: #9d88ff;
+            --ciit-dark: #5568d3;
+        }
+
+        /* Professional Blue Theme */
+        [data-theme="professional"] {
+            --ciit-primary: #1e3a5f;
+            --ciit-secondary: #2c5282;
+            --ciit-tertiary: #3d6aa2;
+            --ciit-accent: #4a90e2;
+            --ciit-light: #63b3ed;
+            --ciit-dark: #0f1e33;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -13,8 +48,8 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #ffffff;
+            background: linear-gradient(135deg, var(--ciit-primary) 0%, var(--ciit-secondary) 50%, var(--ciit-tertiary) 100%);
+            color: var(--text-primary);
             overflow: hidden;
             height: 100vh;
         }
@@ -28,16 +63,16 @@
         /* Sidebar Styles */
         .sidebar {
             width: 280px;
-            background: rgba(0, 0, 0, 0.3);
+            background: var(--overlay-dark);
             backdrop-filter: blur(20px);
-            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            border-right: 1px solid var(--overlay-light);
             display: flex;
             flex-direction: column;
         }
 
         .sidebar-header {
             padding: 20px 16px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid var(--overlay-light);
             text-align: center;
         }
 
@@ -70,12 +105,12 @@
         }
 
         .nav-item:hover {
-            background: rgba(255, 255, 255, 0.1);
+            background: var(--overlay-light);
             transform: translateX(4px);
         }
 
         .nav-item.active {
-            background: rgba(255, 255, 255, 0.15);
+            background: var(--overlay-medium);
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
         }
 
@@ -93,7 +128,7 @@
 
         .sidebar-footer {
             padding: 16px;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            border-top: 1px solid var(--overlay-light);
             font-size: 12px;
             opacity: 0.6;
             text-align: center;
@@ -109,7 +144,7 @@
 
         .header {
             padding: 20px 32px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid var(--overlay-light);
             background: rgba(0, 0, 0, 0.1);
         }
 
@@ -161,7 +196,7 @@
 
         /* Button Styles */
         .btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--ciit-accent) 0%, var(--ciit-light) 100%);
             border: none;
             border-radius: 8px;
             padding: 12px 24px;
@@ -178,11 +213,16 @@
         .btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+            filter: brightness(1.1);
         }
 
         .btn-secondary {
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: var(--overlay-light);
+            border: 1px solid var(--overlay-medium);
+        }
+
+        .btn-secondary:hover {
+            background: var(--overlay-medium);
         }
 
         /* Form Styles */
@@ -200,8 +240,8 @@
         .form-input {
             width: 100%;
             padding: 12px 16px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: var(--overlay-light);
+            border: 1px solid var(--overlay-medium);
             border-radius: 8px;
             color: white;
             font-size: 14px;
@@ -209,13 +249,13 @@
 
         /* Select dropdown styling - comprehensive */
         select {
-            background: rgba(255, 255, 255, 0.1);
+            background: var(--overlay-light);
             color: white !important;
             cursor: pointer;
         }
 
         select.form-input {
-            background: rgba(255, 255, 255, 0.1);
+            background: var(--overlay-light);
             color: white !important;
         }
 
@@ -244,8 +284,8 @@
         /* Checked/selected option */
         select option:checked,
         select.form-input option:checked {
-            background-color: #667eea !important;
-            background: #667eea !important;
+            background-color: var(--ciit-accent) !important;
+            background: var(--ciit-accent) !important;
             color: white !important;
         }
 
@@ -311,14 +351,14 @@
         .progress-bar {
             width: 100%;
             height: 8px;
-            background: rgba(255, 255, 255, 0.1);
+            background: var(--overlay-light);
             border-radius: 4px;
             margin: 16px 0;
         }
 
         .progress-fill {
             height: 100%;
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(90deg, var(--ciit-accent) 0%, var(--ciit-light) 100%);
             border-radius: 4px;
             transition: width 0.3s ease;
         }
@@ -358,7 +398,7 @@
             color: white;
             padding: 16px 24px;
             border-radius: 8px;
-            border-left: 4px solid #667eea;
+            border-left: 4px solid var(--ciit-accent);
             z-index: 1000;
             opacity: 0;
             transform: translateX(100%);
@@ -895,8 +935,10 @@
                             <p>General application settings</p>
                             <div class="form-group">
                                 <label class="form-label">Theme</label>
-                                <select class="form-input">
-                                    <option>Discord Dark</option>
+                                <select class="form-input" id="theme-select" onchange="app.changeTheme(this.value)">
+                                    <option value="ciit">CIIT Philippines (Default)</option>
+                                    <option value="professional">Professional Blue</option>
+                                    <option value="discord">Discord Dark</option>
                                 </select>
                             </div>
                         </div>

@@ -18,6 +18,7 @@ class UnityAutoGraderApp {
         this.loadDashboardData();
         this.currentEditingProvider = null;
         this.supportedProviders = {};
+        await this.loadTheme();
     }
 
     setupEventListeners() {
@@ -3068,6 +3069,58 @@ class UnityAutoGraderApp {
         } catch (error) {
             console.error('❌ Error updating saved results info:', error);
         }
+    }
+
+    async loadTheme() {
+        try {
+            const result = await window.electronAPI.store.get('theme');
+            const theme = result || 'ciit';
+            this.applyTheme(theme);
+
+            // Update theme selector
+            const themeSelect = document.getElementById('theme-select');
+            if (themeSelect) {
+                themeSelect.value = theme;
+            }
+        } catch (error) {
+            console.error('❌ Error loading theme:', error);
+            this.applyTheme('ciit'); // Default to CIIT theme
+        }
+    }
+
+    async changeTheme(theme) {
+        try {
+            this.applyTheme(theme);
+            await window.electronAPI.store.set('theme', theme);
+            this.showToast(`Theme changed to ${this.getThemeName(theme)}`, 'success');
+        } catch (error) {
+            console.error('❌ Error changing theme:', error);
+            this.showToast('Failed to change theme', 'error');
+        }
+    }
+
+    applyTheme(theme) {
+        const body = document.body;
+        const html = document.documentElement;
+
+        // Remove existing theme
+        html.removeAttribute('data-theme');
+        body.removeAttribute('data-theme');
+
+        // Apply new theme (if not default CIIT)
+        if (theme !== 'ciit') {
+            html.setAttribute('data-theme', theme);
+            body.setAttribute('data-theme', theme);
+        }
+    }
+
+    getThemeName(theme) {
+        const themeNames = {
+            'ciit': 'CIIT Philippines',
+            'professional': 'Professional Blue',
+            'discord': 'Discord Dark'
+        };
+        return themeNames[theme] || theme;
     }
 
     showToast(message, type = 'info') {
