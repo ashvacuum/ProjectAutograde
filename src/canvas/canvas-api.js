@@ -166,21 +166,65 @@ class CanvasAPI {
       urlObj.search = '';
       urlObj.hash = '';
 
-      // Get the cleaned URL
-      let cleanedUrl = urlObj.toString();
+      // Get the pathname and clean it
+      let pathname = urlObj.pathname;
+
+      // Remove .git suffix
+      pathname = pathname.replace(/\.git$/, '');
 
       // Remove trailing slashes
-      cleanedUrl = cleanedUrl.replace(/\/+$/, '');
+      pathname = pathname.replace(/\/+$/, '');
 
-      // Remove .git suffix if present
-      cleanedUrl = cleanedUrl.replace(/\.git$/, '');
+      // Extract owner/repo from pathname
+      // GitHub URLs are in format: /owner/repo[/optional-stuff]
+      const pathParts = pathname.split('/').filter(part => part.length > 0);
 
-      // Remove /tree/branch or /blob/branch paths - keep just the repo root
-      cleanedUrl = cleanedUrl.replace(/\/(tree|blob|commit|issues|pull|releases|wiki)\/.*$/, '');
+      if (pathParts.length >= 2) {
+        const owner = pathParts[0];
+        const repo = pathParts[1];
 
-      console.log(`🧹 Cleaned URL: ${url} → ${cleanedUrl}`);
+        // Check if there are additional path segments that should be removed
+        if (pathParts.length > 2) {
+          const thirdPart = pathParts[2];
 
-      return cleanedUrl;
+          // These are GitHub UI paths that should be removed
+          const uiPaths = ['tree', 'blob', 'commit', 'commits', 'issues', 'pull', 'releases',
+                          'wiki', 'actions', 'projects', 'security', 'pulse', 'graphs',
+                          'settings', 'branches', 'tags', 'network', 'contributors'];
+
+          // Common branch names or other paths that shouldn't be part of the base URL
+          const commonBranches = ['main', 'master', 'develop', 'dev', 'production', 'staging', 'src'];
+
+          // If the third part is a UI path or common branch/folder, strip everything after repo
+          if (uiPaths.includes(thirdPart) || commonBranches.includes(thirdPart)) {
+            pathname = `/${owner}/${repo}`;
+          } else if (pathParts.length > 3) {
+            // If there are 4+ parts, it's likely a deep path, keep only owner/repo
+            pathname = `/${owner}/${repo}`;
+          } else {
+            // 3 parts - could be valid, keep for now but log it
+            console.log(`⚠️ Unusual path with 3 segments: ${pathname}`);
+            pathname = `/${owner}/${repo}`;
+          }
+        } else {
+          // Only owner/repo, perfect!
+          pathname = `/${owner}/${repo}`;
+        }
+
+        // Reconstruct the URL with cleaned path
+        urlObj.pathname = pathname;
+        const cleanedUrl = urlObj.toString().replace(/\/+$/, '');
+
+        if (url !== cleanedUrl) {
+          console.log(`🧹 Cleaned URL: ${url} → ${cleanedUrl}`);
+        }
+
+        return cleanedUrl;
+      } else {
+        // Invalid GitHub URL structure
+        console.warn(`⚠️ Invalid GitHub URL structure: ${url}`);
+        return url;
+      }
     } catch (error) {
       console.warn(`⚠️ Failed to parse URL: ${url}`, error);
       // If URL parsing fails, just do basic cleanup
