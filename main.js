@@ -369,7 +369,10 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
         success: true,
         analysis: analysis,
         grade: finalGrade,
-        latePenalty: latePenaltyInfo
+        latePenalty: latePenaltyInfo,
+        needsInstructorIntervention: analysis.needsInstructorIntervention || false,
+        interventionReason: analysis.interventionReason || null,
+        errorType: analysis.errorType || null
       };
     } else {
       console.log('❌ LLM not available');

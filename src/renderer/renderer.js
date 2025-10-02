@@ -1109,7 +1109,11 @@ class UnityAutoGraderApp {
                                 userId: submission.user_id,
                                 githubUrl,
                                 grade: result.grade,
-                                result: result.analysis
+                                result: result.analysis,
+                                latePenalty: result.latePenalty,
+                                needsInstructorIntervention: result.needsInstructorIntervention || false,
+                                interventionReason: result.interventionReason || null,
+                                errorType: result.errorType || null
                             });
                         } else {
                             console.error('❌ Analysis failed:', result.error);
@@ -1119,7 +1123,8 @@ class UnityAutoGraderApp {
                                 githubUrl,
                                 error: result.error || 'Analysis failed',
                                 needsInstructorIntervention: true,
-                                interventionReason: 'Analysis returned failure'
+                                interventionReason: result.interventionReason || 'Analysis returned failure',
+                                errorType: result.errorType || 'analysis_failed'
                             });
                         }
                     } catch (error) {
@@ -1400,7 +1405,10 @@ class UnityAutoGraderApp {
                     latePenalty: result.latePenalty,
                     submittedAt: submissionData.submitted_at,
                     courseId: courseId,
-                    assignmentId: assignmentId
+                    assignmentId: assignmentId,
+                    needsInstructorIntervention: result.needsInstructorIntervention || false,
+                    interventionReason: result.interventionReason || null,
+                    errorType: result.errorType || null
                 });
 
                 this.showToast('Individual grading completed successfully!', 'success');
@@ -2240,11 +2248,30 @@ class UnityAutoGraderApp {
 
         // Error/Intervention Notice
         if (result.needsInstructorIntervention) {
+            const errorTypeIcons = {
+                'invalid_url': '🔗',
+                'not_found': '❌',
+                'private_repo': '🔒',
+                'clone_failed': '📥',
+                'invalid_project': '📂',
+                'error': '⚠️',
+                'analysis_failed': '⚠️'
+            };
+
+            const icon = errorTypeIcons[result.errorType] || '⚠️';
+
             detailsHtml += `
                 <div style="background: rgba(231, 76, 60, 0.2); padding: 16px; border-radius: 8px; margin-bottom: 16px; border-left: 4px solid #e74c3c;">
-                    <strong style="font-size: 16px;">⚠️ Requires Instructor Review</strong><br>
-                    <p style="margin: 8px 0 0 0; opacity: 0.9;">Reason: ${result.interventionReason || 'Unknown'}</p>
-                    ${result.error ? `<p style="margin: 8px 0 0 0; opacity: 0.9;">Error: ${result.error}</p>` : ''}
+                    <strong style="font-size: 16px;">${icon} Requires Instructor Review</strong><br>
+                    <p style="margin: 12px 0 0 0; font-size: 14px;">
+                        <strong>Issue:</strong> ${result.interventionReason || 'Unknown'}
+                    </p>
+                    ${result.errorType === 'private_repo' ? `
+                        <p style="margin: 12px 0 0 0; font-size: 13px; opacity: 0.9; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px;">
+                            <strong>Action Required:</strong> Contact the student to make their repository public or grant instructor access.
+                        </p>
+                    ` : ''}
+                    ${result.error ? `<p style="margin: 12px 0 0 0; font-size: 12px; opacity: 0.7;">Technical Error: ${result.error}</p>` : ''}
                 </div>
             `;
         }

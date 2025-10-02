@@ -13,20 +13,43 @@ class UnityGrader {
   async analyzeProject(repoUrl, criteria) {
     // First, validate the repository URL and check if it exists
     if (!this.gitCommands.isValidGitHubUrl(repoUrl)) {
-      return this.createFailedAnalysis(repoUrl, 'Invalid GitHub URL format', 0);
+      return this.createFailedAnalysis(repoUrl, 'Invalid GitHub URL format', 0, true, 'invalid_url');
     }
 
     try {
-      // Check if repository exists before attempting to clone
+      // Check if repository exists and is accessible before attempting to clone
+      console.log('🔍 Checking repository accessibility...');
       const repoCheck = await this.gitCommands.checkRepositoryExists(repoUrl);
+
       if (!repoCheck.exists) {
-        return this.createFailedAnalysis(repoUrl, repoCheck.error || 'Repository not found', 0);
+        console.log('❌ Repository not found or not accessible');
+        return this.createFailedAnalysis(
+          repoUrl,
+          repoCheck.error || 'Repository not found',
+          0,
+          true,
+          'not_found'
+        );
       }
+
+      // Check if repository is accessible (not private without credentials)
+      if (repoCheck.accessible === false) {
+        console.log('🔒 Repository is private or requires authentication');
+        return this.createFailedAnalysis(
+          repoUrl,
+          'Repository is private or inaccessible. Please ensure the repository is set to public or provide access credentials.',
+          0,
+          true,
+          'private_repo'
+        );
+      }
+
+      console.log('✅ Repository is accessible, proceeding with clone...');
 
       // Clone the repository using git commands
       const cloneResult = await this.gitCommands.cloneRepository(repoUrl);
       if (!cloneResult.success) {
-        return this.createFailedAnalysis(repoUrl, 'Failed to clone repository', 0);
+        return this.createFailedAnalysis(repoUrl, 'Failed to clone repository', 0, true, 'clone_failed');
       }
 
       this.currentProject = cloneResult.path;
@@ -35,7 +58,7 @@ class UnityGrader {
       const validation = await this.gitCommands.validateUnityProject(cloneResult.path);
       if (!validation.isValidUnityProject) {
         await this.cleanup(cloneResult.path);
-        return this.createFailedAnalysis(repoUrl, 'Not a valid Unity project', 0);
+        return this.createFailedAnalysis(repoUrl, 'Not a valid Unity project', 0, true, 'invalid_project');
       }
 
       // If we have warnings but it's still a valid project, continue
@@ -76,11 +99,29 @@ class UnityGrader {
       }
 
       console.error(`Project analysis failed for ${repoUrl}:`, error.message);
-      return this.createFailedAnalysis(repoUrl, error.message, 0);
+
+      // Determine if this is an access issue
+      const isAccessIssue = error.message.includes('Authentication') ||
+                            error.message.includes('private') ||
+                            error.message.includes('not found') ||
+                            error.message.includes('Repository not found');
+
+      return this.createFailedAnalysis(repoUrl, error.message, 0, isAccessIssue, 'error');
     }
   }
 
-  createFailedAnalysis(repoUrl, errorMessage, score = 0) {
+  createFailedAnalysis(repoUrl, errorMessage, score = 0, needsReview = false, errorType = 'unknown') {
+    const errorTypeMessages = {
+      'invalid_url': 'The repository URL format is invalid. Please check the GitHub URL.',
+      'not_found': 'Repository not found. It may have been deleted or the URL is incorrect.',
+      'private_repo': 'Repository is private or inaccessible. Student must make the repository public or grant access.',
+      'clone_failed': 'Failed to clone the repository. There may be network issues or repository problems.',
+      'invalid_project': 'The repository does not contain a valid Unity project structure.',
+      'error': 'An unexpected error occurred during analysis.'
+    };
+
+    const interventionMessage = errorTypeMessages[errorType] || errorMessage;
+
     return {
       repoUrl,
       projectPath: null,
@@ -93,6 +134,9 @@ class UnityGrader {
       timestamp: new Date().toISOString(),
       success: false,
       error: errorMessage,
+      needsInstructorIntervention: needsReview,
+      interventionReason: interventionMessage,
+      errorType: errorType,
       grade: {
         overallGrade: score,
         maxPoints: 100,

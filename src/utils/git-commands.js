@@ -66,27 +66,48 @@ class GitCommands {
 
       // Use git ls-remote to check if repository exists without cloning
       const command = `git ls-remote --heads "${repoUrl}"`;
+      console.log(`   Executing: ${command}`);
       await this.executeCommand(command);
 
+      console.log('   ✅ Repository is public and accessible');
       return {
         exists: true,
         accessible: true
       };
     } catch (error) {
-      if (error.message.includes('Repository not found')) {
+      const errorMessage = error.message.toLowerCase();
+
+      // Check for various error patterns
+      if (errorMessage.includes('repository not found') || errorMessage.includes('could not read from remote')) {
+        console.log('   ❌ Repository not found');
         return {
           exists: false,
+          accessible: false,
           error: 'Repository not found or not accessible'
         };
-      } else if (error.message.includes('Authentication failed')) {
+      } else if (errorMessage.includes('authentication') ||
+                 errorMessage.includes('permission') ||
+                 errorMessage.includes('credentials') ||
+                 errorMessage.includes('denied') ||
+                 errorMessage.includes('403')) {
+        console.log('   🔒 Repository requires authentication (private)');
         return {
           exists: true,
           accessible: false,
-          error: 'Authentication required for private repository'
+          error: 'Repository is private or requires authentication'
         };
-      } else {
+      } else if (errorMessage.includes('fatal:')) {
+        console.log('   ❌ Git fatal error detected');
         return {
           exists: false,
+          accessible: false,
+          error: `Repository access failed: ${error.message}`
+        };
+      } else {
+        console.log('   ❌ Unknown error:', error.message);
+        return {
+          exists: false,
+          accessible: false,
           error: `Repository check failed: ${error.message}`
         };
       }
