@@ -3,6 +3,9 @@ const path = require('path');
 const Store = require('electron-store');
 const express = require('express');
 
+// Load environment variables
+require('dotenv').config();
+
 // Import our custom modules
 const CanvasAuth = require('./src/canvas/canvas-auth');
 const UnityGrader = require('./src/grader/unity-grader');
@@ -10,6 +13,7 @@ const LLMIntegration = require('./src/grader/llm-integration');
 const CriteriaManager = require('./src/criteria/criteria-manager');
 const ResultsExporter = require('./src/grader/results-exporter');
 const APIKeyManager = require('./src/utils/api-key-manager');
+const LatePenaltyCalculator = require('./src/utils/late-penalty-calculator');
 
 const store = new Store();
 let mainWindow;
@@ -126,9 +130,21 @@ function createExpressServer() {
   tryPort(0);
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   createWindow();
   createExpressServer();
+
+  // Load stored Canvas credentials on startup
+  try {
+    const canvasResult = await canvasAuth.loadStoredCredentials();
+    if (canvasResult.success) {
+      console.log('✅ Canvas credentials loaded successfully');
+    } else {
+      console.log('ℹ️  No stored Canvas credentials found');
+    }
+  } catch (error) {
+    console.log('⚠️  Canvas credentials check failed:', error.message);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -245,10 +261,22 @@ ipcMain.handle('canvas-post-grade', async (event, courseId, assignmentId, userId
 
 // Unity Grader IPC Handlers
 ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assignmentDetails = null) => {
+  const startTime = Date.now();
+  console.log('\n========================================');
+  console.log('🎓 GRADING REQUEST RECEIVED');
+  console.log('========================================');
+  console.log('Repository:', repoUrl);
+  console.log('Has Criteria:', !!criteria);
+  console.log('Has Assignment Details:', !!assignmentDetails);
+  console.log('Timestamp:', new Date().toISOString());
+  console.log('========================================\n');
+
   try {
     // Ensure all data is serializable
     const cleanCriteria = JSON.parse(JSON.stringify(criteria));
     const cleanAssignmentDetails = assignmentDetails ? JSON.parse(JSON.stringify(assignmentDetails)) : null;
+
+    console.log('✅ Data serialization successful');
 
     // Send progress updates to the renderer
     mainWindow.webContents.send('grading-progress', {
@@ -258,7 +286,11 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
       currentStudent: 'Analyzing project...'
     });
 
+    console.log('📂 Step 1/3: Cloning and analyzing Unity project...');
     const analysis = await unityGrader.analyzeProject(repoUrl, cleanCriteria);
+    console.log('✅ Unity project analysis complete');
+    console.log('   - Files found:', analysis.codeFiles?.length || 0);
+    console.log('   - Valid Unity project:', analysis.success);
 
     mainWindow.webContents.send('grading-progress', {
       current: 1,
@@ -267,9 +299,60 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
       currentStudent: 'Generating grade...'
     });
 
+    console.log('🤖 Step 2/3: Initializing LLM integration...');
     // If LLM is available, use it for grading
     if (await llmIntegration.initialize()) {
+      console.log('✅ LLM initialized successfully');
+      console.log('   Provider:', llmIntegration.activeProvider?.provider || 'unknown');
+
+      console.log('📝 Step 3/3: Sending to LLM for grading...');
       const gradingResult = await llmIntegration.analyzeUnityProject(analysis, cleanCriteria, cleanAssignmentDetails);
+
+      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+      console.log('✅ LLM grading complete');
+      console.log(`   Overall grade: ${gradingResult.result?.overallGrade || 'N/A'}`);
+      console.log(`   Duration: ${duration}s`);
+
+      // Apply late penalty if applicable
+      let finalGrade = gradingResult.result;
+      let latePenaltyInfo = null;
+
+      // Load late penalty settings
+      const latePenaltySettings = store.get('latePenaltySettings', { enabled: false });
+
+      if (latePenaltySettings.enabled && cleanAssignmentDetails?.due_at && cleanAssignmentDetails?.submitted_at) {
+        console.log('📅 Checking for late submission...');
+
+        const penalty = LatePenaltyCalculator.calculatePenalty({
+          dueDate: cleanAssignmentDetails.due_at,
+          submittedAt: cleanAssignmentDetails.submitted_at,
+          penaltyPerDay: latePenaltySettings.penaltyPerDay || 10,
+          maxPenalty: latePenaltySettings.maxPenalty || 50,
+          gracePeriodHours: latePenaltySettings.gracePeriodHours || 0
+        });
+
+        if (penalty.isLate) {
+          const gradeWithPenalty = LatePenaltyCalculator.applyPenaltyToGrade(
+            finalGrade.overallGrade,
+            finalGrade.maxPoints,
+            penalty
+          );
+
+          console.log(`⏰ Late submission detected: ${penalty.daysLate} days late`);
+          console.log(`   Original grade: ${gradeWithPenalty.originalGrade}/${gradeWithPenalty.maxPoints}`);
+          console.log(`   Penalty: -${gradeWithPenalty.penaltyPoints} points (${gradeWithPenalty.penaltyPercentage}%)`);
+          console.log(`   Final grade: ${gradeWithPenalty.adjustedGrade}/${gradeWithPenalty.maxPoints}`);
+
+          // Update the grade with penalty applied
+          finalGrade.overallGrade = gradeWithPenalty.adjustedGrade;
+          finalGrade.originalGradeBeforePenalty = gradeWithPenalty.originalGrade;
+
+          // Store penalty info for display
+          latePenaltyInfo = gradeWithPenalty;
+        } else {
+          console.log('✅ Submission on time');
+        }
+      }
 
       mainWindow.webContents.send('grading-progress', {
         current: 1,
@@ -278,12 +361,18 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
         currentStudent: 'Complete'
       });
 
+      console.log('\n========================================');
+      console.log('✅ GRADING COMPLETE');
+      console.log('========================================\n');
+
       return {
         success: true,
         analysis: analysis,
-        grade: gradingResult
+        grade: finalGrade,
+        latePenalty: latePenaltyInfo
       };
     } else {
+      console.log('❌ LLM not available');
       // Fallback to basic analysis without LLM
       mainWindow.webContents.send('grading-progress', {
         current: 1,
@@ -542,6 +631,188 @@ ipcMain.handle('api-keys-clear-all', async () => {
     const result = await apiKeyManager.clearAllKeys();
     return result;
   } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Late Penalty Settings IPC Handlers
+ipcMain.handle('late-penalty-save-settings', async (event, settings) => {
+  try {
+    store.set('latePenaltySettings', settings);
+    console.log('✅ Late penalty settings saved:', settings);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Failed to save late penalty settings:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('late-penalty-get-settings', async () => {
+  try {
+    const defaultSettings = {
+      enabled: false,
+      penaltyPerDay: 10,
+      maxPenalty: 50,
+      gracePeriodHours: 0
+    };
+    const settings = store.get('latePenaltySettings', defaultSettings);
+    return { success: true, settings };
+  } catch (error) {
+    console.error('❌ Failed to load late penalty settings:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Diagnostic IPC Handlers
+ipcMain.handle('diagnostics-check-api-keys', async () => {
+  try {
+    console.log('\n========================================');
+    console.log('🔍 API KEY DIAGNOSTICS');
+    console.log('========================================');
+
+    const activeProvider = await apiKeyManager.getActiveProvider();
+
+    if (!activeProvider) {
+      console.log('❌ No active provider found');
+      const allKeys = await apiKeyManager.getAllAPIKeys();
+      console.log('All stored providers:', Object.keys(allKeys));
+      console.log('========================================\n');
+      return {
+        success: false,
+        error: 'No active API provider configured',
+        details: {
+          hasActiveProvider: false,
+          allProviders: Object.keys(allKeys)
+        }
+      };
+    }
+
+    const apiKey = activeProvider.config.apiKey;
+
+    console.log('Provider:', activeProvider.provider);
+    console.log('Provider Name:', activeProvider.config.providerInfo?.name);
+    console.log('API Key Present:', !!apiKey);
+    console.log('API Key Length:', apiKey ? apiKey.length : 0);
+    console.log('API Key First 10:', apiKey ? apiKey.substring(0, 10) : 'N/A');
+    console.log('API Key Last 4:', apiKey ? '***' + apiKey.slice(-4) : 'N/A');
+    console.log('Contains spaces:', apiKey ? apiKey.includes(' ') : false);
+    console.log('Contains newlines:', apiKey ? apiKey.includes('\n') : false);
+    console.log('Trimmed length:', apiKey ? apiKey.trim().length : 0);
+    console.log('Is Active:', activeProvider.config.isActive);
+    console.log('Created At:', activeProvider.config.createdAt);
+    console.log('Last Used:', activeProvider.config.lastUsed);
+
+    // Test the API key
+    console.log('\n🧪 Testing API key...');
+    const testResult = await apiKeyManager.testAPIKey(
+      activeProvider.provider,
+      activeProvider.config
+    );
+
+    console.log('Test Result:', testResult.success ? '✅ Success' : '❌ Failed');
+    if (!testResult.success) {
+      console.log('Error:', testResult.error);
+    }
+    console.log('========================================\n');
+
+    return {
+      success: true,
+      provider: activeProvider.provider,
+      providerName: activeProvider.config.providerInfo?.name,
+      apiKeyPresent: !!apiKey,
+      apiKeyLength: apiKey ? apiKey.length : 0,
+      apiKeyPreview: apiKey ? '***' + apiKey.slice(-4) : 'N/A',
+      apiKeyFirst10: apiKey ? apiKey.substring(0, 10) : 'N/A',
+      containsSpaces: apiKey ? apiKey.includes(' ') : false,
+      containsNewlines: apiKey ? apiKey.includes('\n') : false,
+      trimmedLength: apiKey ? apiKey.trim().length : 0,
+      isActive: activeProvider.config.isActive,
+      createdAt: activeProvider.config.createdAt,
+      lastUsed: activeProvider.config.lastUsed,
+      testResult: testResult
+    };
+  } catch (error) {
+    console.error('❌ Diagnostic error:', error);
+    console.log('========================================\n');
+    return {
+      success: false,
+      error: error.message,
+      stack: error.stack
+    };
+  }
+});
+
+// Grading Results Storage IPC Handlers
+ipcMain.handle('results-save', async (event, results) => {
+  try {
+    console.log('💾 Saving grading results...');
+
+    // Get existing results
+    const existingResults = store.get('gradingResults', []);
+
+    // Add timestamp and ID to new results
+    const resultsWithMetadata = results.map((result, index) => ({
+      ...result,
+      id: result.id || `result-${Date.now()}-${index}`,
+      savedAt: result.savedAt || new Date().toISOString(),
+      gradedAt: result.gradedAt || new Date().toISOString()
+    }));
+
+    // Merge with existing (avoid duplicates by ID)
+    const mergedResults = [...existingResults];
+
+    resultsWithMetadata.forEach(newResult => {
+      const existingIndex = mergedResults.findIndex(r => r.id === newResult.id);
+      if (existingIndex >= 0) {
+        // Update existing
+        mergedResults[existingIndex] = newResult;
+      } else {
+        // Add new
+        mergedResults.push(newResult);
+      }
+    });
+
+    store.set('gradingResults', mergedResults);
+    console.log(`✅ Saved ${resultsWithMetadata.length} results (total: ${mergedResults.length})`);
+
+    return { success: true, count: mergedResults.length };
+  } catch (error) {
+    console.error('❌ Failed to save grading results:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('results-load', async () => {
+  try {
+    const results = store.get('gradingResults', []);
+    console.log(`📥 Loaded ${results.length} saved grading results`);
+    return { success: true, results };
+  } catch (error) {
+    console.error('❌ Failed to load grading results:', error);
+    return { success: false, error: error.message, results: [] };
+  }
+});
+
+ipcMain.handle('results-clear', async () => {
+  try {
+    store.set('gradingResults', []);
+    console.log('🗑️ Cleared all saved grading results');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Failed to clear grading results:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('results-delete', async (event, resultId) => {
+  try {
+    const results = store.get('gradingResults', []);
+    const filtered = results.filter(r => r.id !== resultId);
+    store.set('gradingResults', filtered);
+    console.log(`🗑️ Deleted result ${resultId}`);
+    return { success: true, remaining: filtered.length };
+  } catch (error) {
+    console.error('❌ Failed to delete result:', error);
     return { success: false, error: error.message };
   }
 });

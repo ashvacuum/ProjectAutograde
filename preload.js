@@ -30,7 +30,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   grader: {
-    analyzeProject: (repoUrl, criteria) => ipcRenderer.invoke('grader-analyze-project', repoUrl, criteria),
+    analyzeProject: (repoUrl, criteria, assignmentDetails) => ipcRenderer.invoke('grader-analyze-project', repoUrl, criteria, assignmentDetails),
     getGradingProgress: () => ipcRenderer.invoke('grader-get-progress'),
     cancelGrading: () => ipcRenderer.invoke('grader-cancel')
   },
@@ -71,6 +71,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getActive: () => ipcRenderer.invoke('api-keys-get-active'),
     exportConfig: () => ipcRenderer.invoke('api-keys-export-config'),
     clearAll: () => ipcRenderer.invoke('api-keys-clear-all')
+  },
+
+  latePenalty: {
+    saveSettings: (settings) => ipcRenderer.invoke('late-penalty-save-settings', settings),
+    getSettings: () => ipcRenderer.invoke('late-penalty-get-settings')
+  },
+
+  diagnostics: {
+    checkAPIKeys: () => ipcRenderer.invoke('diagnostics-check-api-keys')
+  },
+
+  results: {
+    save: (results) => ipcRenderer.invoke('results-save', results),
+    load: () => ipcRenderer.invoke('results-load'),
+    clear: () => ipcRenderer.invoke('results-clear'),
+    delete: (resultId) => ipcRenderer.invoke('results-delete', resultId)
   },
 
   onAppError: (callback) => {
