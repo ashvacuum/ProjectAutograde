@@ -72,12 +72,20 @@ class APIKeyManager {
             }
         }
 
+        // Trim all string fields to remove accidental whitespace
+        const cleanedConfig = { ...config };
+        for (const field of requiredFields) {
+            if (typeof cleanedConfig[field] === 'string') {
+                cleanedConfig[field] = cleanedConfig[field].trim();
+            }
+        }
+
         const keyData = {
-            ...config,
+            ...cleanedConfig,
             provider,
             createdAt: new Date().toISOString(),
             lastUsed: null,
-            isActive: config.isActive !== undefined ? config.isActive : true
+            isActive: cleanedConfig.isActive !== undefined ? cleanedConfig.isActive : true
         };
 
         this.store.set(`providers.${provider}`, keyData);
@@ -339,9 +347,42 @@ class APIKeyManager {
         const allKeys = await this.getAllAPIKeys();
         for (const [provider, config] of Object.entries(allKeys)) {
             if (config.isActive && config.apiKey) {
-                return { provider, config };
+                // Ensure providerInfo is always present
+                return {
+                    provider,
+                    config: {
+                        ...config,
+                        providerInfo: this.supportedProviders[provider]
+                    }
+                };
             }
         }
+
+        // Fallback to environment variables if no stored keys are active
+        if (process.env.ANTHROPIC_API_KEY) {
+            return {
+                provider: 'anthropic',
+                config: {
+                    apiKey: process.env.ANTHROPIC_API_KEY,
+                    provider: 'anthropic',
+                    isActive: true,
+                    providerInfo: this.supportedProviders.anthropic
+                }
+            };
+        }
+
+        if (process.env.OPENAI_API_KEY) {
+            return {
+                provider: 'openai',
+                config: {
+                    apiKey: process.env.OPENAI_API_KEY,
+                    provider: 'openai',
+                    isActive: true,
+                    providerInfo: this.supportedProviders.openai
+                }
+            };
+        }
+
         return null;
     }
 
