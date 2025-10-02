@@ -3,6 +3,12 @@
     {
       "name": "Unity Math Fundamentals",
       "description": "Essential mathematical concepts for Unity game development including vectors, quaternions, transforms, and physics",
+      "lateSubmissionPenalty": {
+        "enabled": false,
+        "penaltyPerDay": 10,
+        "maxPenalty": 50,
+        "gracePeriodHours": 0
+      },
       "items": [
         {
           "id": "vector-operations",
@@ -100,6 +106,12 @@
     {
       "name": "Unity Code Quality & Best Practices",
       "description": "Code organization, performance optimization, and Unity-specific best practices for maintainable game development",
+      "lateSubmissionPenalty": {
+        "enabled": false,
+        "penaltyPerDay": 10,
+        "maxPenalty": 50,
+        "gracePeriodHours": 0
+      },
       "items": [
         {
           "id": "monobehaviour-structure",
@@ -201,6 +213,12 @@
     {
       "name": "Advanced Unity Math Concepts",
       "description": "Advanced mathematical concepts for complex game mechanics including matrices, splines, and procedural generation",
+      "lateSubmissionPenalty": {
+        "enabled": false,
+        "penaltyPerDay": 10,
+        "maxPenalty": 50,
+        "gracePeriodHours": 0
+      },
       "items": [
         {
           "id": "matrix-transformations",
