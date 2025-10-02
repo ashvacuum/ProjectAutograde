@@ -62,22 +62,15 @@ class UnityGrader {
       if (!validation.isValidUnityProject) {
         console.log('❌ Not a Unity project at root, searching subdirectories...');
 
-        // Search for Unity project in subdirectories
-        const subDirectories = await this.findSubDirectories(cloneResult.path);
-        console.log(`📂 Found ${subDirectories.length} subdirectories to check`);
+        // Recursively search for Unity project in subdirectories (up to 3 levels deep)
+        const foundPath = await this.findUnityProjectInSubdirectories(cloneResult.path, 3);
 
-        for (const subDir of subDirectories) {
-          const subPath = path.join(cloneResult.path, subDir);
-          console.log(`   Checking: ${subDir}`);
-          const subValidation = await this.gitCommands.validateUnityProject(subPath);
-
-          if (subValidation.isValidUnityProject) {
-            console.log(`✅ Found Unity project in subdirectory: ${subDir}`);
-            validation = subValidation;
-            projectPath = subPath;
-            this.currentProject = projectPath;
-            break;
-          }
+        if (foundPath) {
+          console.log(`✅ Found Unity project at: ${foundPath}`);
+          const subValidation = await this.gitCommands.validateUnityProject(foundPath);
+          validation = subValidation;
+          projectPath = foundPath;
+          this.currentProject = projectPath;
         }
       } else {
         console.log('✅ Unity project found at repository root');
@@ -203,6 +196,60 @@ class UnityGrader {
     } catch (error) {
       console.error('Error finding subdirectories:', error);
       return [];
+    }
+  }
+
+  async findUnityProjectInSubdirectories(basePath, maxDepth, currentDepth = 0) {
+    if (currentDepth >= maxDepth) {
+      return null;
+    }
+
+    try {
+      const items = await fs.readdir(basePath, { withFileTypes: true });
+
+      for (const item of items) {
+        if (!item.isDirectory()) continue;
+
+        // Skip hidden directories and common non-Unity folders
+        if (item.name.startsWith('.') ||
+            item.name === 'node_modules' ||
+            item.name === 'Library' ||
+            item.name === 'Temp' ||
+            item.name === 'Logs') {
+          continue;
+        }
+
+        const subPath = path.join(basePath, item.name);
+        const relativePath = path.relative(this.tempDir, subPath);
+
+        console.log(`${'  '.repeat(currentDepth)}📂 Checking: ${relativePath}`);
+
+        // Check if this directory contains Assets and ProjectSettings
+        try {
+          const subItems = await fs.readdir(subPath, { withFileTypes: true });
+          const hasAssets = subItems.some(si => si.isDirectory() && si.name === 'Assets');
+          const hasProjectSettings = subItems.some(si => si.isDirectory() && si.name === 'ProjectSettings');
+
+          if (hasAssets && hasProjectSettings) {
+            console.log(`${'  '.repeat(currentDepth)}✅ Unity project found!`);
+            return subPath;
+          }
+        } catch (error) {
+          // Skip directories we can't read
+          continue;
+        }
+
+        // Recursively check subdirectories
+        const foundPath = await this.findUnityProjectInSubdirectories(subPath, maxDepth, currentDepth + 1);
+        if (foundPath) {
+          return foundPath;
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.error(`Error searching directory ${basePath}:`, error);
+      return null;
     }
   }
 
