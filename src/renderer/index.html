@@ -207,21 +207,46 @@
             font-size: 14px;
         }
 
-        .form-input select,
-        .form-input option {
-            background: rgba(40, 40, 40, 0.95);
-            color: white;
+        /* Select dropdown styling - comprehensive */
+        select {
+            background: rgba(255, 255, 255, 0.1);
+            color: white !important;
+            cursor: pointer;
         }
 
         select.form-input {
             background: rgba(255, 255, 255, 0.1);
-            color: white;
+            color: white !important;
+        }
+
+        /* Option styling - force dark background */
+        select option {
+            background-color: #2a2a2a !important;
+            background: #2a2a2a !important;
+            color: white !important;
+            padding: 8px !important;
         }
 
         select.form-input option {
-            background: rgba(40, 40, 40, 0.95);
-            color: white;
-            padding: 8px;
+            background-color: #2a2a2a !important;
+            background: #2a2a2a !important;
+            color: white !important;
+            padding: 8px !important;
+        }
+
+        /* Hover state for options */
+        select option:hover,
+        select.form-input option:hover {
+            background-color: #3a3a3a !important;
+            background: #3a3a3a !important;
+        }
+
+        /* Checked/selected option */
+        select option:checked,
+        select.form-input option:checked {
+            background-color: #667eea !important;
+            background: #667eea !important;
+            color: white !important;
         }
 
         .form-input::placeholder {
@@ -587,10 +612,58 @@
                     </div>
 
                     <div class="card">
-                        <h3>Batch Grading</h3>
-                        <p>Grade multiple submissions at once</p>
-                        <button class="btn" onclick="startBatchGrading()" id="start-grading-btn" disabled>Start Batch Grading</button>
-                        <button class="btn btn-secondary" onclick="cancelGrading()" id="cancel-grading-btn" style="display: none;">Cancel</button>
+                        <h3>Individual Assignment Grading</h3>
+                        <p>Grade a specific assignment submission</p>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                            <div>
+                                <label style="display: block; margin-bottom: 4px; font-size: 14px; font-weight: 500;">Course</label>
+                                <select id="grading-course-select" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: white;">
+                                    <option value="">Select Course</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 4px; font-size: 14px; font-weight: 500;">Assignment</label>
+                                <select id="grading-assignment-select" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: white;">
+                                    <option value="">Select Assignment</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom: 16px;">
+                            <label style="display: block; margin-bottom: 4px; font-size: 14px; font-weight: 500;">Student Submission</label>
+                            <select id="grading-student-select" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: white;" disabled>
+                                <option value="">Select an assignment first</option>
+                            </select>
+                            <small style="display: block; margin-top: 4px; opacity: 0.7; font-size: 12px;">Only submissions with GitHub URLs are shown</small>
+                            <div id="student-select-debug" style="display: none; margin-top: 8px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 4px; font-size: 11px; font-family: monospace;">
+                                Debug info will appear here
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom: 16px;">
+                            <label style="display: block; margin-bottom: 4px; font-size: 14px; font-weight: 500;">Grading Criteria</label>
+                            <select id="grading-criteria-select" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: white;">
+                                <option value="">Select Criteria Template</option>
+                            </select>
+                        </div>
+
+                        <div style="margin-bottom: 16px;">
+                            <label style="display: block; margin-bottom: 4px; font-size: 14px; font-weight: 500;">Instructions</label>
+                            <textarea id="grading-instructions" placeholder="Additional grading instructions..." style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: white; resize: vertical; min-height: 60px;"></textarea>
+                        </div>
+
+                        <div style="margin-bottom: 16px;">
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 14px;">
+                                <input type="checkbox" id="use-claude-code" style="margin: 0;">
+                                Use Claude Code integration
+                            </label>
+                        </div>
+
+                        <div style="display: flex; gap: 12px;">
+                            <button class="btn" onclick="startIndividualGrading()" id="start-individual-grading-btn" disabled>Grade Selected Assignment</button>
+                            <button class="btn btn-secondary" onclick="cancelGrading()" id="cancel-grading-btn" style="display: none;">Cancel</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -602,6 +675,19 @@
                     <p>View and export grading results</p>
                 </div>
                 <div class="content-area">
+                    <div class="card">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                            <div>
+                                <h3 style="margin: 0;">Saved Results</h3>
+                                <p style="margin: 4px 0 0 0; font-size: 13px; opacity: 0.7;" id="saved-results-info">Results are automatically saved</p>
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-secondary" onclick="app.refreshSavedResults()">Refresh</button>
+                                <button class="btn" onclick="app.clearAllResults()" style="background: rgba(231, 76, 60, 0.2); border-color: rgba(231, 76, 60, 0.5);">Clear All</button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="card">
                         <h3>Results Filter</h3>
                         <div style="display: flex; gap: 12px; margin-bottom: 16px;">
@@ -710,6 +796,77 @@
                         <!-- API Keys List -->
                         <div id="api-keys-list">
                             <p>Loading API keys...</p>
+                        </div>
+                    </div>
+
+                    <!-- Late Penalty Settings -->
+                    <div class="card">
+                        <h3>📅 Late Submission Penalty</h3>
+                        <p>Configure automatic late submission deductions</p>
+
+                        <div class="form-group">
+                            <label class="form-label">
+                                <input type="checkbox" id="late-penalty-enabled" onchange="app.toggleLatePenalty()" style="margin-right: 8px;">
+                                Enable late submission penalties
+                            </label>
+                        </div>
+
+                        <div id="late-penalty-config" style="display: none; margin-top: 16px;">
+                            <div class="grid-2">
+                                <div class="form-group">
+                                    <label class="form-label" for="penalty-per-day">Penalty Per Day (%)</label>
+                                    <select class="form-input" id="penalty-per-day">
+                                        <option value="5">5%</option>
+                                        <option value="10">10%</option>
+                                        <option value="15">15%</option>
+                                        <option value="20">20%</option>
+                                        <option value="25">25%</option>
+                                        <option value="30">30%</option>
+                                        <option value="35">35%</option>
+                                        <option value="40">40%</option>
+                                        <option value="45">45%</option>
+                                        <option value="50">50%</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="max-penalty">Maximum Penalty (%)</label>
+                                    <select class="form-input" id="max-penalty">
+                                        <option value="10">10%</option>
+                                        <option value="15">15%</option>
+                                        <option value="20">20%</option>
+                                        <option value="25">25%</option>
+                                        <option value="30">30%</option>
+                                        <option value="35">35%</option>
+                                        <option value="40">40%</option>
+                                        <option value="45">45%</option>
+                                        <option value="50" selected>50%</option>
+                                        <option value="55">55%</option>
+                                        <option value="60">60%</option>
+                                        <option value="65">65%</option>
+                                        <option value="70">70%</option>
+                                        <option value="75">75%</option>
+                                        <option value="80">80%</option>
+                                        <option value="85">85%</option>
+                                        <option value="90">90%</option>
+                                        <option value="95">95%</option>
+                                        <option value="100">100%</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="grace-period">Grace Period (Hours)</label>
+                                <input type="number" class="form-input" id="grace-period" min="0" max="72" step="1" value="0" placeholder="0">
+                                <small style="opacity: 0.7; display: block; margin-top: 4px;">Allow submissions within this many hours after the deadline without penalty</small>
+                            </div>
+
+                            <div style="background: rgba(255,255,255,0.05); padding: 16px; border-radius: 8px; margin-top: 16px;">
+                                <h4 style="font-size: 14px; margin-bottom: 8px;">Example Calculation</h4>
+                                <p style="font-size: 13px; opacity: 0.8;" id="late-penalty-example">
+                                    If a student submits 3 days late with 10% per day penalty, they lose 30% of their grade.
+                                </p>
+                            </div>
+
+                            <button class="btn" onclick="app.saveLatePenaltySettings()" style="margin-top: 16px;">Save Late Penalty Settings</button>
                         </div>
                     </div>
 
