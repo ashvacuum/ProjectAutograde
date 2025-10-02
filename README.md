@@ -45,9 +45,9 @@ A desktop application that automates grading for Unity game math assignments sub
 ## 📋 Prerequisites
 
 - **Node.js** (v18 or higher) - [Download here](https://nodejs.org/)
-- **Claude Desktop App** - Required for grading functionality
-- **Canvas LMS Access** - API token required
-- **Git** - For repository operations
+- **LLM API Key** - At least one of: OpenAI, Anthropic (Claude), Google Gemini, Cohere, Azure OpenAI
+- **Canvas LMS Access** - API token required (instructor/TA permissions)
+- **Git** - For repository operations (must be in system PATH)
 
 ## 🚀 Quick Start
 
@@ -64,7 +64,28 @@ A desktop application that automates grading for Unity game math assignments sub
    - Build the Windows executable
    - Create an installer in the `dist` folder
 
-### 2. Configuration
+### 1b. Development & Testing
+
+For testing and debugging, use these batch files:
+
+- **`start-debug.bat`** - **RECOMMENDED FOR TESTING**
+  - Opens DevTools automatically
+  - Enables verbose logging to console
+  - Shows detailed grading progress
+  - Perfect for troubleshooting
+
+- **`start-dev.bat`** - Development mode
+  - Standard development environment
+  - DevTools available (F12)
+  - Some logging enabled
+
+- **`npm start`** - Production mode
+  - Minimal logging
+  - No DevTools by default
+
+### 2. Configuration (Optional - Environment Variables)
+
+The app stores credentials securely in electron-store, but you can also use environment variables as a fallback:
 
 1. **Copy the environment template:**
    ```bash
@@ -75,30 +96,41 @@ A desktop application that automates grading for Unity game math assignments sub
    ```env
    CANVAS_API_URL=https://your-school.instructure.com/api/v1
    CANVAS_TOKEN=your_canvas_api_token_here
+   # or use: CANVAS_API_KEY=your_canvas_api_token_here (both work)
    GITHUB_TOKEN=your_github_token_here
    ```
 
+**Note**: Credentials entered in the UI take precedence over `.env` values. The `.env` file is only used as a fallback if no credentials are stored in electron-store.
+
 ### 3. First Time Setup
 
-1. **Launch the application**
-2. **Navigate to "Canvas Setup"** and enter your Canvas credentials
-3. **Go to "Grading Criteria"** and load the default Unity math templates
-4. **Check Claude Code status** in Settings to ensure integration is working
+1. **Launch the application** (run `npm start` or use built executable)
+2. **Navigate to "Settings"** panel and add your LLM API key (OpenAI, Claude, or other)
+3. **Navigate to "Canvas Setup"** and enter your Canvas credentials
+4. **Go to "Criteria"** panel and load the default Unity math templates
+5. **Verify LLM status** shows as "Available" in the Dashboard
 
 ## 🎮 Usage Workflow
 
 ### Standard Grading Process
 
-1. **Connect to Canvas** - Set up your Canvas API credentials
-2. **Select Course** - Choose the course containing Unity assignments
-3. **Choose Assignment** - Pick the assignment to grade
-4. **Configure Criteria** - Select or customize grading criteria
-5. **Start Batch Grading** - Let the app automatically:
-   - Clone GitHub repositories from submissions
-   - Analyze Unity C# code
-   - Generate grades using Claude Code
-   - Post results back to Canvas
-6. **Review Results** - Check grades and export reports
+1. **Connect to Canvas** - Set up your Canvas API credentials in Canvas Setup panel
+2. **Select Course** - Go to Assignments panel, choose the course containing Unity assignments
+3. **Choose Assignment** - Click "Grade" on the assignment you want to grade
+4. **Review Submissions** - App shows all submissions with GitHub URLs
+5. **Configure Criteria** - Select grading criteria template (or use default)
+6. **Start Batch Grading** - Click "Start Batch Grading" button. App will:
+   - Clone each GitHub repository to temp directory
+   - Validate Unity project structure (Assets, ProjectSettings folders)
+   - Analyze C# scripts for Unity patterns and math concepts
+   - Send analysis to LLM with rubric and assignment context
+   - Receive structured grading with feedback
+   - Clean up temp files
+7. **Review Results** - Go to Results panel to:
+   - View detailed grades and feedback for each student
+   - Handle submissions flagged for instructor review
+   - Post grades to Canvas
+   - Export results to CSV/JSON/PDF
 
 ### Minimal Workflow (No Build)
 - Pulls GitHub repositories
@@ -185,24 +217,43 @@ unity-auto-grader/
 - Check token validity and permissions
 - Ensure network connectivity
 
-**Claude Code Not Available**
-- Install Claude Desktop application
-- Verify Claude Code is in system PATH
-- Check Settings panel for status
+**LLM API Key Issues**
+- Configure at least one LLM provider in Settings panel
+- Supported providers: OpenAI, Anthropic (Claude), Google Gemini, Cohere, Azure OpenAI
+- Test API key after adding it
+- Check if key is marked as "Active"
 
 **GitHub Repository Access**
 - Ensure repositories are public or provide GitHub token
 - Verify repository URLs in Canvas submissions
 - Check internet connectivity
+- Git must be installed and in system PATH
+
+**Grading Failures**
+- Verify repository is a valid Unity project (has Assets and ProjectSettings folders)
+- Check that repository contains C# scripts
+- Ensure LLM API has sufficient quota/credits
+- Review error messages in Results panel under "Needs Review"
 
 **Build Failures**
 - Update Node.js to latest LTS version
 - Clear node_modules and reinstall: `npm install`
 - Run as administrator if permission issues
 
+### Known Issues & Fixes
+
+Several critical bugs were identified and fixed:
+1. **GitHub URL extraction inconsistency** - Fixed property naming mismatch
+2. **Missing user object in submissions** - Added proper user structure
+3. **Assignment context not passed to LLM** - Fixed IPC parameter passing
+4. **Canvas URL validation error** - Corrected boolean logic
+5. **Grade extraction from nested results** - Improved error handling
+6. **GitHub URL regex too strict** - Updated to accept more formats
+
 ### Log Files
 - Application logs: `%APPDATA%/unity-auto-grader/logs/`
-- Electron logs: Check Developer Tools (F12)
+- Electron logs: Check Developer Tools (F12 or Ctrl+Shift+I)
+- Temp directory: `Project AutoGrade/temp/` (manually clean if needed)
 
 ## 📈 Roadmap
 
