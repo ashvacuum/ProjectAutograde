@@ -8,7 +8,15 @@
       "Bash(npm install:*)",
       "Bash(npx electron-packager:*)",
       "Bash(dir:*)",
-      "Bash(npm start)"
+      "Bash(npm start)",
+      "Bash(node:*)",
+      "Bash(findstr:*)",
+      "Bash(echo:*)",
+      "Read(//c/Users/v-2jo/AppData/Roaming/unity-auto-grader-desktop/**)",
+      "Bash(cat:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
