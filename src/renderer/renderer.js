@@ -909,14 +909,17 @@ class UnityAutoGraderApp {
 
                 <div style="margin-bottom: 16px;">
                     <label style="display: flex; align-items: center; gap: 8px; font-size: 14px;">
-                        <input type="checkbox" id="batch-use-claude-code" style="margin: 0;">
-                        Use Claude Code integration for enhanced analysis
+                        <input type="checkbox" id="batch-skip-graded" style="margin: 0;" checked>
+                        Skip already-graded submissions
                     </label>
+                    <small style="margin-left: 24px; opacity: 0.7; display: block; margin-top: 4px;">
+                        Uncheck to regrade all submissions
+                    </small>
                 </div>
 
                 <div style="display: flex; gap: 12px; align-items: center;">
                     <button class="btn" onclick="app.startBatchGradingFromAssignments()" id="start-batch-grading-from-assignments-btn" disabled>
-                        Start Batch Grading (${submissions.length} submissions)
+                        Start Batch Grading (<span id="ungraded-count">${submissions.length}</span>/<span id="total-count">${submissions.length}</span> submissions)
                     </button>
                     <button class="btn btn-secondary" onclick="app.cancelBatchGrading()" id="cancel-batch-grading-btn" style="display: none;">
                         Cancel
@@ -936,6 +939,28 @@ class UnityAutoGraderApp {
 
         // Load criteria options
         this.loadBatchCriteriaOptions();
+
+        // Update submission counts when skip-graded checkbox changes
+        const skipGradedCheckbox = document.getElementById('batch-skip-graded');
+        const updateCounts = () => {
+            const ungradedCount = submissions.filter(sub =>
+                !sub.score && sub.score !== 0 && !sub.grade
+            ).length;
+            const ungradedCountSpan = document.getElementById('ungraded-count');
+            const totalCountSpan = document.getElementById('total-count');
+
+            if (skipGradedCheckbox && skipGradedCheckbox.checked) {
+                if (ungradedCountSpan) ungradedCountSpan.textContent = ungradedCount;
+            } else {
+                if (ungradedCountSpan) ungradedCountSpan.textContent = submissions.length;
+            }
+            if (totalCountSpan) totalCountSpan.textContent = submissions.length;
+        };
+
+        if (skipGradedCheckbox) {
+            skipGradedCheckbox.addEventListener('change', updateCounts);
+            updateCounts(); // Initial update
+        }
     }
 
     async loadBatchCriteriaOptions() {
@@ -977,12 +1002,12 @@ class UnityAutoGraderApp {
     async startBatchGradingFromAssignments() {
         const criteriaId = document.getElementById('batch-criteria-select').value;
         const instructions = document.getElementById('batch-instructions').value;
-        const useClaudeCode = document.getElementById('batch-use-claude-code').checked;
+        const skipGraded = document.getElementById('batch-skip-graded')?.checked ?? true;
 
         console.log('=== BATCH GRADING START ===');
         console.log('Criteria ID:', criteriaId);
         console.log('Instructions:', instructions);
-        console.log('Use Claude Code:', useClaudeCode);
+        console.log('Skip Already Graded:', skipGraded);
         console.log('Current Assignment:', this.currentAssignment);
 
         if (!criteriaId) {
@@ -995,9 +1020,27 @@ class UnityAutoGraderApp {
             return;
         }
 
+        // Filter submissions based on skip-graded setting
+        let submissionsToGrade = this.currentAssignment.submissions;
+        if (skipGraded) {
+            const originalCount = submissionsToGrade.length;
+            submissionsToGrade = submissionsToGrade.filter(sub =>
+                !sub.score && sub.score !== 0 && !sub.grade
+            );
+            const skippedCount = originalCount - submissionsToGrade.length;
+
+            console.log(`📊 Filtering: ${submissionsToGrade.length} ungraded / ${originalCount} total`);
+            console.log(`⏭️  Skipping ${skippedCount} already-graded submission(s)`);
+
+            if (submissionsToGrade.length === 0) {
+                this.showToast('All submissions have already been graded. Uncheck "Skip already-graded" to regrade.', 'info');
+                return;
+            }
+        }
+
         try {
-            console.log(`📊 Starting batch grading for ${this.currentAssignment.submissions.length} submissions`);
-            this.showToast('Starting batch grading...', 'info');
+            console.log(`📊 Starting batch grading for ${submissionsToGrade.length} submissions`);
+            this.showToast(`Starting batch grading for ${submissionsToGrade.length} submission(s)...`, 'info');
 
             // Show progress UI
             const progressContainer = document.getElementById('batch-progress-container');
@@ -1022,15 +1065,14 @@ class UnityAutoGraderApp {
                 return;
             }
 
-            // Process all submissions
+            // Process submissions (filtered or all)
             this.gradingResults = [];
-            const submissions = this.currentAssignment.submissions;
 
-            for (let i = 0; i < submissions.length; i++) {
-                const submission = submissions[i];
-                const progress = ((i + 1) / submissions.length) * 100;
+            for (let i = 0; i < submissionsToGrade.length; i++) {
+                const submission = submissionsToGrade[i];
+                const progress = ((i + 1) / submissionsToGrade.length) * 100;
 
-                console.log(`\n--- Processing Submission ${i + 1}/${submissions.length} ---`);
+                console.log(`\n--- Processing Submission ${i + 1}/${submissionsToGrade.length} ---`);
                 console.log('Student:', submission.user?.name || 'Unknown');
                 console.log('User ID:', submission.user_id);
 
@@ -1039,7 +1081,7 @@ class UnityAutoGraderApp {
                 const progressText = document.getElementById('batch-progress-text');
 
                 if (progressFill) progressFill.style.width = `${progress}%`;
-                if (progressText) progressText.textContent = `Grading ${submission.user?.name || 'Unknown'} (${i + 1}/${submissions.length})`;
+                if (progressText) progressText.textContent = `Grading ${submission.user?.name || 'Unknown'} (${i + 1}/${submissionsToGrade.length})`;
 
                 // Extract GitHub URL
                 let githubUrl = '';
