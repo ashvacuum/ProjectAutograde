@@ -1113,7 +1113,9 @@ class UnityAutoGraderApp {
                                 latePenalty: result.latePenalty,
                                 needsInstructorIntervention: result.needsInstructorIntervention || false,
                                 interventionReason: result.interventionReason || null,
-                                errorType: result.errorType || null
+                                errorType: result.errorType || null,
+                                courseId: this.currentAssignment.courseId,
+                                assignmentId: this.currentAssignment.assignmentId
                             });
                         } else {
                             console.error('❌ Analysis failed:', result.error);
@@ -1124,7 +1126,9 @@ class UnityAutoGraderApp {
                                 error: result.error || 'Analysis failed',
                                 needsInstructorIntervention: true,
                                 interventionReason: result.interventionReason || 'Analysis returned failure',
-                                errorType: result.errorType || 'analysis_failed'
+                                errorType: result.errorType || 'analysis_failed',
+                                courseId: this.currentAssignment.courseId,
+                                assignmentId: this.currentAssignment.assignmentId
                             });
                         }
                     } catch (error) {
@@ -1136,7 +1140,9 @@ class UnityAutoGraderApp {
                             githubUrl,
                             error: error.message,
                             needsInstructorIntervention: true,
-                            interventionReason: 'Grading error occurred'
+                            interventionReason: 'Grading error occurred',
+                            courseId: this.currentAssignment.courseId,
+                            assignmentId: this.currentAssignment.assignmentId
                         });
                     }
                 } else {
@@ -2516,6 +2522,7 @@ class UnityAutoGraderApp {
         console.log('Has result.courseId:', !!result?.courseId);
         console.log('Has result.assignmentId:', !!result?.assignmentId);
         console.log('Has result.studentId:', !!result?.studentId);
+        console.log('Has result.userId:', !!result?.userId);
         console.log('Has this.currentAssignment:', !!this.currentAssignment);
 
         if (!result) {
@@ -2531,7 +2538,7 @@ class UnityAutoGraderApp {
         }
 
         // Try to get course/assignment info from result first, then fall back to currentAssignment
-        let courseId, assignmentId;
+        let courseId, assignmentId, userId;
 
         if (result.courseId && result.assignmentId) {
             console.log('✅ Using courseId and assignmentId from result');
@@ -2547,9 +2554,18 @@ class UnityAutoGraderApp {
             return;
         }
 
+        // Get user ID - check both studentId (individual grading) and userId (batch grading)
+        userId = result.studentId || result.userId;
+
+        if (!userId) {
+            console.error('❌ No user ID found in result');
+            this.showToast('Cannot post grade - missing student/user ID', 'error');
+            return;
+        }
+
         console.log('Course ID:', courseId);
         console.log('Assignment ID:', assignmentId);
-        console.log('Student ID:', result.studentId);
+        console.log('User ID:', userId);
 
         try {
             let grade = 0;
@@ -2575,7 +2591,7 @@ class UnityAutoGraderApp {
             const postResult = await window.electronAPI.canvas.postGrade(
                 courseId,
                 assignmentId,
-                result.studentId,
+                userId,
                 grade,
                 feedback
             );
