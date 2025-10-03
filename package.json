@@ -33,6 +33,7 @@
   "build": {
     "appId": "com.unityautograder.desktop",
     "productName": "Unity Auto-Grader",
+    "publish": null,
     "directories": {
       "output": "dist"
     },
