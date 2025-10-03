@@ -2,6 +2,30 @@
 
 A desktop application that automates grading for Unity game math assignments submitted via Canvas LMS. The app integrates with Claude Code for intelligent code analysis and provides a Discord-like modern UI for instructors.
 
+## 📥 Installation (For End Users)
+
+### Download the Latest Release
+
+**[Download Latest Version](https://github.com/ashvacuum/ProjectAutograde/releases/latest)**
+
+Choose one of the following installation options:
+
+#### Option 1: Installer (Recommended)
+1. Download **Unity Auto-Grader Setup X.X.X.exe** from the latest release
+2. Run the installer
+3. Follow the installation wizard
+4. Launch from Start Menu or Desktop shortcut
+
+#### Option 2: Portable Version
+1. Download **Unity Auto-Grader-X.X.X-win.zip** from the latest release
+2. Extract the ZIP file to your preferred location
+3. Run **Unity Auto-Grader.exe** from the extracted folder
+
+### System Requirements
+- **Operating System**: Windows 10 or later (64-bit)
+- **Internet Connection**: Required for Canvas and LLM API access
+- **Git**: Must be installed and available in system PATH ([Download Git](https://git-scm.com/download/win))
+
 ## 🎯 Features
 
 ### Canvas LMS Integration
@@ -42,101 +66,156 @@ A desktop application that automates grading for Unity game math assignments sub
 - PDF reports with detailed feedback
 - Grade distribution statistics
 
-## 📋 Prerequisites
+## 🚀 Quick Start Guide
 
-- **Node.js** (v18 or higher) - [Download here](https://nodejs.org/)
-- **LLM API Key** - At least one of: OpenAI, Anthropic (Claude), Google Gemini, Cohere, Azure OpenAI
-- **Canvas LMS Access** - API token required (instructor/TA permissions)
-- **Git** - For repository operations (must be in system PATH)
+### Step 1: Get Your API Keys
 
-## 🚀 Quick Start
+Before using the app, you'll need:
 
-### 1. Installation
+1. **Canvas API Token** (Required)
+   - Log into your Canvas LMS
+   - Go to **Account → Settings**
+   - Scroll to **"Approved Integrations"**
+   - Click **"+ New Access Token"**
+   - Enter purpose: "Unity Auto-Grader"
+   - Copy the generated token
 
-1. **Clone or download this repository**
-2. **Open a command prompt in the project directory**
-3. **Run the Windows build script:**
-   ```bash
-   build-windows.bat
-   ```
-   This will:
-   - Install all dependencies
-   - Build the Windows executable
-   - Create an installer in the `dist` folder
+2. **LLM API Key** (Required - choose at least one)
+   - **OpenAI**: [Get API key](https://platform.openai.com/api-keys)
+   - **Anthropic (Claude)**: [Get API key](https://console.anthropic.com/)
+   - **Google Gemini**: [Get API key](https://makersuite.google.com/app/apikey)
+   - **Other supported**: Cohere, Azure OpenAI
 
-### 1b. Development & Testing
+### Step 2: First Time Setup
 
-For testing and debugging, use these batch files:
+1. **Launch Unity Auto-Grader**
+2. **Configure LLM API Key**:
+   - Click **"Settings"** in the sidebar
+   - Click **"Add API Key"**
+   - Select your LLM provider
+   - Enter your API key
+   - Verify status shows "Available"
 
-- **`start-debug.bat`** - **RECOMMENDED FOR TESTING**
-  - Opens DevTools automatically
-  - Enables verbose logging to console
-  - Shows detailed grading progress
-  - Perfect for troubleshooting
+3. **Connect to Canvas**:
+   - Click **"Canvas Setup"** in the sidebar
+   - Enter your Canvas URL (e.g., `https://yourschool.instructure.com`)
+   - Paste your Canvas API token
+   - Click **"Connect to Canvas"**
+   - Verify connection is successful
 
-- **`start-dev.bat`** - Development mode
-  - Standard development environment
-  - DevTools available (F12)
-  - Some logging enabled
+4. **Load Grading Criteria** (Optional):
+   - Click **"Criteria"** in the sidebar
+   - Select a pre-built template or create custom criteria
+   - Templates include Unity math concepts, code quality, etc.
 
-- **`npm start`** - Production mode
-  - Minimal logging
-  - No DevTools by default
+### Step 3: Grade Your First Assignment
 
-### 2. Configuration (Optional - Environment Variables)
+1. **Select Course and Assignment**:
+   - Click **"Assignments"** in the sidebar
+   - Choose your course from the dropdown
+   - Click **"Grade"** next to the Unity assignment you want to grade
 
-The app stores credentials securely in electron-store, but you can also use environment variables as a fallback:
+2. **Review Submissions**:
+   - App displays all student submissions with GitHub URLs
+   - Verify submissions are detected correctly
 
-1. **Copy the environment template:**
-   ```bash
-   copy .env.example .env
-   ```
+3. **Configure Grading**:
+   - Select grading criteria (or use default Unity math template)
+   - Optionally skip already-graded submissions
 
-2. **Edit the `.env` file with your settings:**
-   ```env
-   CANVAS_API_URL=https://your-school.instructure.com/api/v1
-   CANVAS_TOKEN=your_canvas_api_token_here
-   # or use: CANVAS_API_KEY=your_canvas_api_token_here (both work)
-   GITHUB_TOKEN=your_github_token_here
-   ```
+4. **Start Batch Grading**:
+   - Click **"Start Batch Grading"**
+   - App will automatically:
+     - Clone each student's GitHub repository
+     - Analyze Unity C# scripts
+     - Grade based on your criteria
+     - Generate detailed feedback
+     - Clean up temporary files
 
-**Note**: Credentials entered in the UI take precedence over `.env` values. The `.env` file is only used as a fallback if no credentials are stored in electron-store.
+5. **Review and Post Grades**:
+   - Click **"Results"** in the sidebar
+   - Review grades and feedback for each student
+   - Handle any submissions flagged for manual review
+   - Click **"Post to Canvas"** to submit grades
+   - Export results to CSV/PDF/JSON as needed
 
-### 3. First Time Setup
+## 📖 Detailed User Guide
 
-1. **Launch the application** (run `npm start` or use built executable)
-2. **Navigate to "Settings"** panel and add your LLM API key (OpenAI, Claude, or other)
-3. **Navigate to "Canvas Setup"** and enter your Canvas credentials
-4. **Go to "Criteria"** panel and load the default Unity math templates
-5. **Verify LLM status** shows as "Available" in the Dashboard
+### How Grading Works
 
-## 🎮 Usage Workflow
+The Unity Auto-Grader follows this workflow:
 
-### Standard Grading Process
+1. **Repository Cloning**: Downloads student's GitHub repository to a temporary folder
+2. **Project Validation**: Verifies the repository is a valid Unity project (checks for Assets and ProjectSettings folders)
+3. **Script Analysis**: Analyzes all C# scripts for Unity-specific patterns and math concepts
+4. **LLM Grading**: Sends code analysis to your configured LLM with assignment criteria
+5. **Feedback Generation**: Receives structured grades with detailed feedback
+6. **Cleanup**: Removes temporary files after grading
 
-1. **Connect to Canvas** - Set up your Canvas API credentials in Canvas Setup panel
-2. **Select Course** - Go to Assignments panel, choose the course containing Unity assignments
-3. **Choose Assignment** - Click "Grade" on the assignment you want to grade
-4. **Review Submissions** - App shows all submissions with GitHub URLs
-5. **Configure Criteria** - Select grading criteria template (or use default)
-6. **Start Batch Grading** - Click "Start Batch Grading" button. App will:
-   - Clone each GitHub repository to temp directory
-   - Validate Unity project structure (Assets, ProjectSettings folders)
-   - Analyze C# scripts for Unity patterns and math concepts
-   - Send analysis to LLM with rubric and assignment context
-   - Receive structured grading with feedback
-   - Clean up temp files
-7. **Review Results** - Go to Results panel to:
-   - View detailed grades and feedback for each student
-   - Handle submissions flagged for instructor review
-   - Post grades to Canvas
-   - Export results to CSV/JSON/PDF
+### Grading Criteria Explained
 
-### Minimal Workflow (No Build)
-- Pulls GitHub repositories
-- Analyzes code without compilation
-- Grades based on code structure and math usage
-- Cleans up temporary files automatically
+The app uses weighted scoring across multiple criteria categories:
+
+- **Unity Math Concepts**: Vector operations, quaternions, transforms, physics, trigonometry, interpolation
+- **Code Quality**: MonoBehaviour structure, performance, naming conventions, error handling, organization
+- **Custom Criteria**: Create your own criteria based on assignment requirements
+
+Each criterion has:
+- **Name**: What you're grading
+- **Weight**: Points allocated (e.g., 25 points)
+- **Description**: What to look for in student code
+
+### Canvas Integration
+
+#### Posting Grades
+- Grades are posted individually or in batch
+- Includes both numerical score and detailed text feedback
+- Comments appear in Canvas gradebook for students to review
+
+#### Required Permissions
+Your Canvas API token must have:
+- Read course content
+- Read and write grades
+- Read user information
+- Read assignment submissions
+
+### Export Options
+
+**CSV Export**: Spreadsheet format for gradebook integration
+- Student name, email, score, feedback
+- Importable into Excel or Google Sheets
+
+**JSON Export**: Machine-readable format for data analysis
+- Complete grading results with metadata
+- Useful for custom reporting tools
+
+**PDF Export**: Professional grade reports
+- Student name and submission details
+- Score breakdown by criteria
+- Detailed feedback and code examples
+- Suitable for student records
+
+## 🎓 Understanding the Grading Process
+
+### What Students Need to Submit
+Students must submit GitHub repository URLs through Canvas. The repository should contain:
+- A valid Unity project structure (Assets and ProjectSettings folders)
+- C# scripts implementing the assigned math concepts
+- Public repository or provide GitHub access token
+
+### What the App Analyzes
+The grading engine looks for:
+- **Unity Patterns**: Proper use of MonoBehaviour, lifecycle methods (Start, Update, FixedUpdate)
+- **Math Concepts**: Vector operations, quaternion rotations, physics calculations
+- **Code Quality**: Naming conventions, error handling, performance optimization
+- **Best Practices**: SerializeField usage, component references, code organization
+
+### Grading is Code-Based Only
+Important: This tool performs **static code analysis** only
+- Does NOT compile or run Unity projects
+- Does NOT test gameplay functionality
+- Analyzes C# code structure and patterns
+- Best for grading math implementation and code quality
 
 ## 📊 Grading Criteria
 
@@ -158,30 +237,14 @@ The app stores credentials securely in electron-store, but you can also use envi
 
 ## 🔧 Technical Details
 
-### Architecture
+### Technology Stack
 - **Electron** - Cross-platform desktop framework
 - **Node.js** - Backend processing
-- **Canvas API** - LMS integration
+- **Canvas LMS API** - Learning management system integration
 - **Simple Git** - Repository operations
-- **Claude Code** - AI-powered grading
+- **LLM Integration** - AI-powered grading via OpenAI, Anthropic, Google, etc.
 
-### File Structure
-```
-unity-auto-grader/
-├── main.js                 # Electron main process
-├── preload.js             # Secure IPC bridge
-├── package.json           # Dependencies and scripts
-├── src/
-│   ├── renderer/          # UI components
-│   ├── canvas/           # Canvas API integration
-│   ├── grader/           # Core grading engine
-│   ├── criteria/         # Criteria management
-│   └── utils/            # Helper utilities
-├── assets/               # App icons and resources
-└── dist/                 # Build output
-```
-
-### Dependencies
+### Key Dependencies
 - **Electron** - Desktop app framework
 - **Express** - Local server for IPC
 - **Axios** - HTTP client for Canvas API
@@ -189,24 +252,6 @@ unity-auto-grader/
 - **Electron-store** - Secure local data storage
 - **CSV-writer** - Export functionality
 - **jsPDF** - PDF generation
-
-## 🎯 Canvas Setup
-
-### Getting Your Canvas API Token
-
-1. **Log into Canvas**
-2. **Go to Account → Settings**
-3. **Scroll to "Approved Integrations"**
-4. **Click "+ New Access Token"**
-5. **Enter purpose: "Unity Auto-Grader"**
-6. **Copy the generated token**
-7. **Paste into the app's Canvas Setup page**
-
-### Required Canvas Permissions
-- Read course content
-- Read and write grades
-- Read user information
-- Read assignment submissions
 
 ## 🔍 Troubleshooting
 
@@ -269,15 +314,96 @@ Several critical bugs were identified and fixed:
 - Incremental analysis for code changes
 - Caching for repeated submissions
 
-## 🤝 Contributing
+## 👨‍💻 For Developers and Contributors
 
 This is an educational tool designed for Unity game development instructors. Contributions and feedback are welcome!
 
-### Development Setup
-1. Clone repository
-2. Run `npm install`
-3. Run `npm start` for development mode
-4. Use `npm run dev` for hot-reload development
+### Building from Source
+
+#### Prerequisites
+- **Node.js** (v18 or higher) - [Download here](https://nodejs.org/)
+- **Git** - For repository operations
+
+#### Installation Steps
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/ashvacuum/ProjectAutograde.git
+   cd ProjectAutograde
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+
+3. **Run in development mode**:
+   ```bash
+   npm start
+   ```
+
+#### Development Scripts
+
+- **`npm start`** - Production mode (minimal logging)
+- **`npm run dev`** - Development mode with hot-reload
+- **`start-debug.bat`** - Debug mode with DevTools and verbose logging (RECOMMENDED FOR TESTING)
+- **`start-dev.bat`** - Development mode via batch file
+
+#### Building Executables
+
+**Windows**:
+```bash
+npm run build-win
+```
+Creates installer and ZIP in `dist/` folder
+
+**Using build script**:
+```bash
+build-windows.bat
+```
+Installs dependencies and builds Windows executable
+
+### Environment Variables (Optional)
+
+For development, you can use a `.env` file:
+
+1. Copy the template:
+   ```bash
+   copy .env.example .env
+   ```
+
+2. Edit `.env` with your credentials:
+   ```env
+   CANVAS_API_URL=https://your-school.instructure.com/api/v1
+   CANVAS_TOKEN=your_canvas_api_token_here
+   GITHUB_TOKEN=your_github_token_here
+   ```
+
+**Note**: UI credentials take precedence over `.env` values
+
+### Project Structure
+```
+unity-auto-grader/
+├── main.js                 # Electron main process
+├── preload.js             # Secure IPC bridge
+├── package.json           # Dependencies and scripts
+├── src/
+│   ├── renderer/          # UI components
+│   ├── canvas/           # Canvas API integration
+│   ├── grader/           # Core grading engine
+│   ├── criteria/         # Criteria management
+│   └── utils/            # Helper utilities
+├── assets/               # App icons and resources
+└── dist/                 # Build output
+```
+
+### Contributing Guidelines
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly using `start-debug.bat`
+5. Submit a pull request with detailed description
 
 ## 📄 License
 
