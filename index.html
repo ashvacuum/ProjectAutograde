@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Unity Auto-Grader</title>
+    <title>AraLaro</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
         * {
@@ -14,7 +14,7 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #1e293b 0%, #6d28d9 50%, #14b8a6 100%);
             color: #ffffff;
             height: 100vh;
             overflow: hidden;
@@ -44,7 +44,7 @@
 
         .logo i {
             margin-right: 10px;
-            color: #4CAF50;
+            color: #14b8a6;
         }
 
         .nav-menu {
@@ -160,8 +160,8 @@
 
         .form-input:focus, .form-select:focus, .form-textarea:focus {
             outline: none;
-            border-color: #4CAF50;
-            box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.2);
+            border-color: #14b8a6;
+            box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.2);
         }
 
         .form-textarea {
@@ -190,13 +190,13 @@
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #4CAF50, #45a049);
+            background: linear-gradient(135deg, #14b8a6, #0d9488);
             color: white;
         }
 
         .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+            box-shadow: 0 5px 15px rgba(20, 184, 166, 0.4);
         }
 
         .btn-secondary {
@@ -237,18 +237,18 @@
         }
 
         .status-connected {
-            background: rgba(76, 175, 80, 0.2);
-            color: #4CAF50;
+            background: rgba(132, 204, 22, 0.2);
+            color: #84cc16;
         }
 
         .status-disconnected {
-            background: rgba(244, 67, 54, 0.2);
-            color: #f44336;
+            background: rgba(249, 115, 22, 0.2);
+            color: #f97316;
         }
 
         .status-processing {
-            background: rgba(255, 193, 7, 0.2);
-            color: #FFC107;
+            background: rgba(251, 191, 36, 0.2);
+            color: #fbbf24;
         }
 
         /* Progress bar */
@@ -271,7 +271,7 @@
 
         .progress-fill {
             height: 100%;
-            background: linear-gradient(90deg, #4CAF50, #45a049);
+            background: linear-gradient(90deg, #14b8a6, #0d9488);
             border-radius: 4px;
             transition: width 0.3s ease;
             width: 0%;
@@ -339,7 +339,7 @@
             height: 20px;
             border: 2px solid rgba(255, 255, 255, 0.3);
             border-radius: 50%;
-            border-top-color: #4CAF50;
+            border-top-color: #14b8a6;
             animation: spin 1s ease-in-out infinite;
         }
 
@@ -390,7 +390,7 @@
         <div class="sidebar">
             <div class="logo">
                 <i class="fas fa-gamepad"></i>
-                Unity Auto-Grader
+                AraLaro
             </div>
             <nav>
                 <ul class="nav-menu">
@@ -446,7 +446,7 @@
             <div class="page active" id="dashboard">
                 <div class="page-header">
                     <h1 class="page-title">Dashboard</h1>
-                    <p class="page-subtitle">Welcome to Unity Auto-Grader - Your automated grading companion</p>
+                    <p class="page-subtitle">Welcome to AraLaro - Your automated grading companion</p>
                 </div>
 
                 <div class="card">

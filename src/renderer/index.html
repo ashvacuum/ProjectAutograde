@@ -3,16 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Unity Auto-Grader</title>
+    <title>AraLaro</title>
     <style>
-        /* Theme Variables */
+        /* Theme Variables - AraLaro */
         :root {
-            --ciit-primary: #00364D;
-            --ciit-secondary: #005073;
-            --ciit-tertiary: #006994;
-            --ciit-accent: #0088CC;
-            --ciit-light: #00A8E8;
-            --ciit-dark: #001F2E;
+            --ciit-primary: #1e293b;
+            --ciit-secondary: #6d28d9;
+            --ciit-tertiary: #14b8a6;
+            --ciit-accent: #14b8a6;
+            --ciit-light: #14b8a6;
+            --ciit-dark: #0f172a;
+            --success-color: #84cc16;
+            --warning-color: #f97316;
+            --achievement-color: #fbbf24;
             --text-primary: #ffffff;
             --text-secondary: rgba(255, 255, 255, 0.8);
             --overlay-light: rgba(255, 255, 255, 0.1);
@@ -312,18 +315,18 @@
         }
 
         .status-connected {
-            background: rgba(46, 204, 113, 0.2);
-            color: #2ecc71;
+            background: rgba(132, 204, 22, 0.2);
+            color: var(--success-color);
         }
 
         .status-disconnected {
-            background: rgba(231, 76, 60, 0.2);
-            color: #e74c3c;
+            background: rgba(249, 115, 22, 0.2);
+            color: var(--warning-color);
         }
 
         .status-loading {
-            background: rgba(241, 196, 15, 0.2);
-            color: #f1c40f;
+            background: rgba(251, 191, 36, 0.2);
+            color: var(--achievement-color);
         }
 
         /* Grid Layouts */
@@ -660,7 +663,7 @@
         <!-- Sidebar -->
         <div class="sidebar">
             <div class="sidebar-header">
-                <h1>Unity Auto-Grader</h1>
+                <h1>AraLaro</h1>
                 <p>Automated Assignment Grading</p>
             </div>
 

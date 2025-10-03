@@ -1,6 +1,6 @@
-# Unity Auto-Grader Desktop App
+# AraLaro
 
-A desktop application that automates grading for Unity game math assignments submitted via Canvas LMS. The app integrates with Claude Code for intelligent code analysis and provides a Discord-like modern UI for instructors.
+A desktop application that automates grading for Unity game math assignments submitted via Canvas LMS. The app integrates with AI-powered code analysis and provides a modern UI for instructors.
 
 ## 📥 Installation (For End Users)
 
@@ -11,15 +11,15 @@ A desktop application that automates grading for Unity game math assignments sub
 Choose one of the following installation options:
 
 #### Option 1: Installer (Recommended)
-1. Download **Unity Auto-Grader Setup X.X.X.exe** from the latest release
+1. Download **AraLaro Setup X.X.X.exe** from the latest release
 2. Run the installer
 3. Follow the installation wizard
 4. Launch from Start Menu or Desktop shortcut
 
 #### Option 2: Portable Version
-1. Download **Unity Auto-Grader-X.X.X-win.zip** from the latest release
+1. Download **AraLaro-X.X.X-win.zip** from the latest release
 2. Extract the ZIP file to your preferred location
-3. Run **Unity Auto-Grader.exe** from the extracted folder
+3. Run **AraLaro.exe** from the extracted folder
 
 ### System Requirements
 - **Operating System**: Windows 10 or later (64-bit)
@@ -88,7 +88,7 @@ Before using the app, you'll need:
 
 ### Step 2: First Time Setup
 
-1. **Launch Unity Auto-Grader**
+1. **Launch AraLaro**
 2. **Configure LLM API Key**:
    - Click **"Settings"** in the sidebar
    - Click **"Add API Key"**
@@ -143,7 +143,7 @@ Before using the app, you'll need:
 
 ### How Grading Works
 
-The Unity Auto-Grader follows this workflow:
+AraLaro follows this workflow:
 
 1. **Repository Cloning**: Downloads student's GitHub repository to a temporary folder
 2. **Project Validation**: Verifies the repository is a valid Unity project (checks for Assets and ProjectSettings folders)
@@ -203,7 +203,7 @@ Students must submit GitHub repository URLs through Canvas. The repository shoul
 - C# scripts implementing the assigned math concepts
 - Public repository or provide GitHub access token
 
-### What the App Analyzes
+### What AraLaro Analyzes
 The grading engine looks for:
 - **Unity Patterns**: Proper use of MonoBehaviour, lifecycle methods (Start, Update, FixedUpdate)
 - **Math Concepts**: Vector operations, quaternion rotations, physics calculations
@@ -211,7 +211,7 @@ The grading engine looks for:
 - **Best Practices**: SerializeField usage, component references, code organization
 
 ### Grading is Code-Based Only
-Important: This tool performs **static code analysis** only
+Important: AraLaro performs **static code analysis** only
 - Does NOT compile or run Unity projects
 - Does NOT test gameplay functionality
 - Analyzes C# code structure and patterns
@@ -422,4 +422,4 @@ For issues, feature requests, or questions:
 
 ---
 
-**Made for Unity educators by Claude Code** 🎮✨
+**AraLaro - Made for Unity educators** 🎮✨

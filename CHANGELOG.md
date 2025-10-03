@@ -1,6 +1,18 @@
 # Changelog
 
-All notable changes to Unity Auto-Grader will be documented in this file.
+All notable changes to AraLaro will be documented in this file.
+
+## [Unreleased]
+
+### Changed
+- Rebranded from Unity Auto-Grader to AraLaro
+- Updated color theme with new palette:
+  - Deep Purple (#6d28d9) - creativity + intelligence
+  - Vibrant Teal (#14b8a6) - innovation + accuracy
+  - Dark Slate (#1e293b) - professionalism
+  - Lime Green (#84cc16) - success/correct code
+  - Coral (#f97316) - warnings/errors
+  - Gold (#fbbf24) - achievements
 
 ## [1.0.6] - 2025-10-03
 
