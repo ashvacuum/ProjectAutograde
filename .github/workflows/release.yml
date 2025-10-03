@@ -8,11 +8,7 @@ on:
 
 jobs:
   release:
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      matrix:
-        os: [windows-latest, ubuntu-latest]
+    runs-on: windows-latest
 
     steps:
       - name: Checkout code
@@ -27,17 +23,12 @@ jobs:
         run: npm install
 
       - name: Build Windows
-        if: matrix.os == 'windows-latest'
         run: npm run build-win
-
-      - name: Build Linux
-        if: matrix.os == 'ubuntu-latest'
-        run: npm run build-linux
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.os }}-build
+          name: windows-build
           path: dist/*
 
   create-release:
