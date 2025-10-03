@@ -1,6 +1,6 @@
 {
   "name": "unity-auto-grader-desktop",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Desktop application for automated Unity game math assignment grading",
   "main": "main.js",
   "scripts": {
@@ -11,7 +11,6 @@
     "build-mac": "electron-builder --mac",
     "build-linux": "electron-builder --linux",
     "pack": "electron-builder --dir",
-    "package-win": "electron-packager . unity-auto-grader --platform=win32 --arch=x64 --out=dist --overwrite --prune=true",
     "dist": "npm run build",
     "test": "jest"
   },
@@ -27,8 +26,7 @@
   },
   "devDependencies": {
     "electron": "^38.1.2",
-    "electron-builder": "^24.6.4",
-    "electron-packager": "^17.1.2",
+    "electron-builder": "^25.1.8",
     "jest": "^29.7.0",
     "nodemon": "^3.0.1"
   },
