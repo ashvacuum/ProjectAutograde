@@ -1,6 +1,6 @@
 {
   "name": "unity-auto-grader-desktop",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Desktop application for automated Unity game math assignment grading",
   "main": "main.js",
   "scripts": {
