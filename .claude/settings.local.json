@@ -17,7 +17,9 @@
       "Bash(cmd.exe:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(git tag:*)",
+      "Bash(identify:*)"
     ],
     "deny": [],
     "ask": []

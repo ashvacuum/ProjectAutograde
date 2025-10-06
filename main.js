@@ -47,7 +47,7 @@ function createWindow() {
       enableWebSQL: false,
       experimentalFeatures: false
     },
-    icon: path.join(__dirname, 'assets', 'icon.png'),
+    icon: path.join(__dirname, 'assets', 'icon.ico'),
     titleBarStyle: 'default',
     show: false
   });
@@ -116,7 +116,7 @@ function createExpressServer() {
 
     const port = tryPorts[portIndex];
     server = serverApp.listen(port, () => {
-      console.log(`Unity Auto-Grader server running on port ${port}`);
+      console.log(`AraLaro server running on port ${port}`);
     }).on('error', (err) => {
       if (err.code === 'EADDRINUSE') {
         console.log(`Port ${port} is in use, trying next port...`);

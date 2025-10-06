@@ -8,8 +8,6 @@
     "dev": "NODE_ENV=development electron .",
     "build": "electron-builder",
     "build-win": "electron-builder --win",
-    "build-mac": "electron-builder --mac",
-    "build-linux": "electron-builder --linux",
     "pack": "electron-builder --dir",
     "dist": "npm run build",
     "test": "jest"
@@ -47,11 +45,8 @@
     "compression": "normal",
     "nodeGypRebuild": false,
     "buildDependenciesFromSource": false,
-    "mac": {
-      "category": "public.app-category.education",
-      "target": "dmg"
-    },
     "win": {
+      "icon": "assets/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -67,10 +62,6 @@
         }
       ],
       "requestedExecutionLevel": "asInvoker"
-    },
-    "linux": {
-      "target": "AppImage",
-      "category": "Education"
     },
     "nsis": {
       "oneClick": false,
