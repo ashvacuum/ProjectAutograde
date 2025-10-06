@@ -1,4 +1,4 @@
-# Quick Fix Summary - Unity Auto-Grader
+# Quick Fix Summary - AraLaro
 
 ## All Issues Fixed in This Session ✅
 

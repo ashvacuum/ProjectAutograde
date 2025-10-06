@@ -108,7 +108,7 @@ exports/
 dist/
 build/
 
-# Unity Auto-Grader specific
+# AraLaro specific
 temp/
 exports/
 logs/

@@ -26,7 +26,7 @@ Switched from electron-builder to electron-packager:
 npm run package-win
 
 # Or directly:
-npx electron-packager . unity-auto-grader --platform=win32 --arch=x64 --out=dist --overwrite --prune=true
+npx electron-packager . aralaro --platform=win32 --arch=x64 --out=dist --overwrite --prune=true
 ```
 
 ### 3. Updated Build Scripts
@@ -49,8 +49,8 @@ build-windows.bat
 ```
 
 ### Build Output:
-- Location: `dist\unity-auto-grader-win32-x64\`
-- Executable: `unity-auto-grader.exe`
+- Location: `dist\aralaro-win32-x64\`
+- Executable: `aralaro.exe`
 - Type: Portable application (no installer needed)
 
 ## Application Status: ✅ FUNCTIONAL
@@ -78,7 +78,7 @@ npm run build-win
 ### Option C: Use Alternative Packager
 ```bash
 npm install @electron/packager --save-dev
-npx @electron/packager . unity-auto-grader --platform=win32 --arch=x64 --out=dist --overwrite
+npx @electron/packager . aralaro --platform=win32 --arch=x64 --out=dist --overwrite
 ```
 
 ## Recommendation

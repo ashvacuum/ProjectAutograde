@@ -1,4 +1,4 @@
-# Unity Auto-Grader - Complete User Manual
+# AraLaro - Complete User Manual
 
 ## Table of Contents
 1. [Overview](#overview)
@@ -12,7 +12,7 @@
 
 ## Overview
 
-Unity Auto-Grader is a desktop application that automates the grading of Unity game development assignments submitted through Canvas LMS. The application features:
+AraLaro is a desktop application that automates the grading of Unity game development assignments submitted through Canvas LMS. The application features:
 
 - **Automated Repository Analysis**: Clones GitHub repositories and analyzes Unity C# code
 - **Claude Code Integration**: Uses Claude Code for intelligent code assessment
@@ -105,7 +105,7 @@ If the automated script fails:
 2. Go to **Account → Settings**
 3. Scroll to **"Approved Integrations"**
 4. Click **"+ New Access Token"**
-5. Enter purpose: **"Unity Auto-Grader"**
+5. Enter purpose: **"AraLaro"**
 6. Copy the generated token
 7. Paste into the application's Canvas Setup page
 
@@ -506,7 +506,7 @@ setTimeout(() => {
 
 2. **Verify File Structure**
    ```
-   unity-auto-grader/
+   aralaro/
    ├── main.js                 ✓
    ├── preload.js             ✓
    ├── package.json           ✓
@@ -657,4 +657,4 @@ MIT License - See LICENSE file for details.
 
 ---
 
-*This manual covers the complete functionality of Unity Auto-Grader. For specific implementation details, refer to the source code and inline documentation.*
+*This manual covers the complete functionality of AraLaro. For specific implementation details, refer to the source code and inline documentation.*

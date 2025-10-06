@@ -1,8 +1,8 @@
-# Unity Auto-Grader - Function Reference
+# AraLaro - Function Reference
 
 ## Core Architecture
 
-The Unity Auto-Grader follows a modular architecture with clear separation of concerns:
+AraLaro follows a modular architecture with clear separation of concerns:
 
 ```
 Main Process (Electron)
@@ -401,11 +401,11 @@ Options:
 
 ## Frontend (Renderer Process)
 
-### UnityAutoGraderApp Class
+### AraLaroApp Class
 **File**: `src/renderer/renderer.js`
 
 ```javascript
-class UnityAutoGraderApp {
+class AraLaroApp {
   init()
   showPanel(panelName)
   authenticateCanvas()
@@ -553,4 +553,4 @@ const timeouts = {
 
 ---
 
-*This function reference provides comprehensive documentation of all major components and their interactions within the Unity Auto-Grader application.*
+*This function reference provides comprehensive documentation of all major components and their interactions within the AraLaro application.*

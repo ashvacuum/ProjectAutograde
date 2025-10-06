@@ -77,7 +77,7 @@ Before using the app, you'll need:
    - Go to **Account → Settings**
    - Scroll to **"Approved Integrations"**
    - Click **"+ New Access Token"**
-   - Enter purpose: "Unity Auto-Grader"
+   - Enter purpose: "AraLaro"
    - Copy the generated token
 
 2. **LLM API Key** (Required - choose at least one)
@@ -296,7 +296,7 @@ Several critical bugs were identified and fixed:
 6. **GitHub URL regex too strict** - Updated to accept more formats
 
 ### Log Files
-- Application logs: `%APPDATA%/unity-auto-grader/logs/`
+- Application logs: `%APPDATA%/aralaro/logs/`
 - Electron logs: Check Developer Tools (F12 or Ctrl+Shift+I)
 - Temp directory: `Project AutoGrade/temp/` (manually clean if needed)
 
@@ -383,7 +383,7 @@ For development, you can use a `.env` file:
 
 ### Project Structure
 ```
-unity-auto-grader/
+aralaro/
 ├── main.js                 # Electron main process
 ├── preload.js             # Secure IPC bridge
 ├── package.json           # Dependencies and scripts

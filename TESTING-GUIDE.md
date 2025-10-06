@@ -1,4 +1,4 @@
-# Testing Guide - Unity Auto-Grader
+# Testing Guide - AraLaro
 
 ## Quick Start for Testing
 
@@ -156,12 +156,12 @@ Shows:
 ### Check Stored Config
 Open in Notepad:
 ```bash
-notepad "C:\Users\v-2jo\AppData\Roaming\unity-auto-grader-desktop\config.json"
+notepad "C:\Users\v-2jo\AppData\Roaming\aralaro\config.json"
 ```
 
 ### Clear All Stored Data (Reset)
 ```bash
-rmdir /s /q "C:\Users\v-2jo\AppData\Roaming\unity-auto-grader-desktop"
+rmdir /s /q "C:\Users\v-2jo\AppData\Roaming\aralaro"
 ```
 
 ## Grading Process Timeline

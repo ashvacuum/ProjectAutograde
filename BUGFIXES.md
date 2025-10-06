@@ -1,4 +1,4 @@
-# Bug Fixes Applied - Unity Auto-Grader
+# Bug Fixes Applied - AraLaro
 
 ## Session Date: 2025-01-01
 
@@ -17,7 +17,7 @@
 - `src/renderer/renderer.js:1688-1722` - Improved Canvas Setup panel to show stored credentials
 
 **Storage Location**:
-- Windows: `C:\Users\v-2jo\AppData\Roaming\unity-auto-grader-desktop\config.json`
+- Windows: `C:\Users\v-2jo\AppData\Roaming\aralaro\config.json`
 - Stores: `canvas.apiUrl`, `canvas.token`, `canvas.user`, `canvas.authenticatedAt`
 
 **How to Verify**:
@@ -207,17 +207,17 @@ After these fixes, verify:
 **Check if credentials are stored**:
 ```bash
 # Open this file in notepad:
-notepad "C:\Users\v-2jo\AppData\Roaming\unity-auto-grader-desktop\config.json"
+notepad "C:\Users\v-2jo\AppData\Roaming\aralaro\config.json"
 ```
 
 **Check for stored API keys**:
 ```bash
-notepad "C:\Users\v-2jo\AppData\Roaming\unity-auto-grader-desktop\api-keys.json"
+notepad "C:\Users\v-2jo\AppData\Roaming\aralaro\api-keys.json"
 ```
 
 **Clear all stored data** (reset app):
 ```bash
-rmdir /s /q "C:\Users\v-2jo\AppData\Roaming\unity-auto-grader-desktop"
+rmdir /s /q "C:\Users\v-2jo\AppData\Roaming\aralaro"
 ```
 
 **View application logs**:

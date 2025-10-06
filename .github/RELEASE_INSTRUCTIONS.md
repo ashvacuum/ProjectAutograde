@@ -1,4 +1,4 @@
-# Unity Auto-Grader - Installation Instructions
+# AraLaro - Installation Instructions
 
 ## Download the Right Version
 
@@ -21,8 +21,8 @@
    - Click "Open Anyway"
 
 ### Linux
-1. Make the `.AppImage` executable: `chmod +x Unity-Auto-Grader-*.AppImage`
-2. Run it: `./Unity-Auto-Grader-*.AppImage`
+1. Make the `.AppImage` executable: `chmod +x AraLaro-*.AppImage`
+2. Run it: `./AraLaro-*.AppImage`
 
 ## First Time Setup
 
@@ -43,4 +43,4 @@
 - **Canvas connection fails**: Verify your API token and Canvas URL in Settings
 - **Unity projects not detected**: Ensure Unity is installed and path is set correctly in Settings
 
-For issues and support, visit: https://github.com/yourusername/unity-auto-grader/issues
+For issues and support, visit: https://github.com/ashvacuum/ProjectAutograde/issues
