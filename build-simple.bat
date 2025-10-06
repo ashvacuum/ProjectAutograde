@@ -1,5 +1,5 @@
 @echo off
-echo Building Unity Auto-Grader (Simple Build)...
+echo Building AraLaro (Simple Build)...
 
 :: Check if Node.js is installed
 where node >nul 2>nul
@@ -26,7 +26,7 @@ if %errorlevel% neq 0 (
 
     :: Alternative: Create a simple packaged app
     echo Creating simple package...
-    call npx electron-packager . unity-auto-grader --platform=win32 --arch=x64 --out=dist --overwrite --ignore="node_modules/(devtron|electron-prebuilt|electron-packager|\.bin)" --prune=true
+    call npx electron-packager . aralaro --platform=win32 --arch=x64 --out=dist --overwrite --ignore="node_modules/(devtron|electron-prebuilt|electron-packager|\.bin)" --prune=true
 
     if %errorlevel% neq 0 (
         echo Packager also failed, trying development mode...
@@ -34,8 +34,8 @@ if %errorlevel% neq 0 (
     ) else (
         echo.
         echo Portable app created successfully!
-        echo Location: dist\unity-auto-grader-win32-x64\
-        echo Run unity-auto-grader.exe to start the application
+        echo Location: dist\aralaro-win32-x64\
+        echo Run aralaro.exe to start the application
     )
 ) else (
     echo.

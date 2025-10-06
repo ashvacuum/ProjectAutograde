@@ -9,7 +9,7 @@ node -e "require('dotenv').config(); console.log('   ANTHROPIC_API_KEY:', proces
 
 echo.
 echo 2. Checking stored keys...
-if exist "%APPDATA%\unity-auto-grader-desktop\api-keys.json" (
+if exist "%APPDATA%\aralaro\api-keys.json" (
     echo    Stored keys file EXISTS
     echo    This means the app might use OLD keys from here
     echo    instead of your .env file!
@@ -27,7 +27,7 @@ echo Recommendation:
 echo ========================================
 echo.
 
-if exist "%APPDATA%\unity-auto-grader-desktop\api-keys.json" (
+if exist "%APPDATA%\aralaro\api-keys.json" (
     echo The app has STORED keys that might be OLD/INVALID.
     echo.
     echo Option 1: Clear stored keys to use .env

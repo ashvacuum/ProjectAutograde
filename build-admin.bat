@@ -9,7 +9,7 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-echo Building Unity Auto-Grader with Administrator Privileges...
+echo Building AraLaro with Administrator Privileges...
 
 :: Enable Developer Mode to allow symbolic links without admin (for future runs)
 echo Attempting to enable Developer Mode for symbolic links...
@@ -48,7 +48,7 @@ if %errorlevel% neq 0 (
     if %errorlevel% neq 0 (
         echo Portable build failed, creating simple package...
         call npm install electron-packager -g
-        call npx electron-packager . unity-auto-grader --platform=win32 --arch=x64 --out=dist --overwrite
+        call npx electron-packager . aralaro --platform=win32 --arch=x64 --out=dist --overwrite
     )
 )
 

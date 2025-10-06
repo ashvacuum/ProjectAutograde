@@ -1,5 +1,5 @@
 @echo off
-echo Starting Unity Auto-Grader in Development Mode...
+echo Starting AraLaro in Development Mode...
 
 :: Check if Node.js is installed
 where node >nul 2>nul

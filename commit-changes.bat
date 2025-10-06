@@ -1,5 +1,5 @@
 @echo off
-echo Committing Unity Auto-Grader changes...
+echo Committing AraLaro changes...
 
 :: Check if git is available
 where git >nul 2>nul
@@ -31,7 +31,7 @@ if %errorlevel% equ 0 (
 
 :: Get commit message from user or use default
 set /p commit_message="Enter commit message (or press Enter for default): "
-if "%commit_message%"=="" set commit_message=Unity Auto-Grader application update
+if "%commit_message%"=="" set commit_message=AraLaro application update
 
 :: Commit changes
 echo Committing changes...

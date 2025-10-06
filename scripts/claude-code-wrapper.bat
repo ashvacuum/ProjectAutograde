@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 
-:: Claude Code Wrapper Script for Unity Auto-Grader
+:: Claude Code Wrapper Script for AraLaro
 :: This script interfaces with Claude Code CLI to analyze Unity projects
 
 set "SCRIPT_DIR=%~dp0"

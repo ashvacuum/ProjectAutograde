@@ -1,5 +1,5 @@
 @echo off
-echo Building Unity Auto-Grader for Windows...
+echo Building AraLaro for Windows...
 
 :: Check if Node.js is installed
 where node >nul 2>nul
@@ -37,7 +37,7 @@ echo Building Windows executable...
 call npm run package-win
 if %errorlevel% neq 0 (
     echo Error: Build failed, trying alternative method...
-    call npx electron-packager . unity-auto-grader --platform=win32 --arch=x64 --out=dist --overwrite --prune=true
+    call npx electron-packager . aralaro --platform=win32 --arch=x64 --out=dist --overwrite --prune=true
     if %errorlevel% neq 0 (
         echo Error: All build methods failed
         pause
@@ -47,6 +47,6 @@ if %errorlevel% neq 0 (
 
 echo.
 echo Build completed successfully!
-echo The application can be found in: dist\unity-auto-grader-win32-x64\unity-auto-grader.exe
+echo The application can be found in: dist\aralaro-win32-x64\aralaro.exe
 echo.
 pause

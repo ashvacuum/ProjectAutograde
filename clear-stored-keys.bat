@@ -6,12 +6,12 @@ echo.
 echo This will DELETE all stored API keys from the app.
 echo After this, the app will use keys from .env file instead.
 echo.
-echo Location: %APPDATA%\unity-auto-grader-desktop
+echo Location: %APPDATA%\aralaro
 echo.
 pause
 
-if exist "%APPDATA%\unity-auto-grader-desktop\api-keys.json" (
-    del "%APPDATA%\unity-auto-grader-desktop\api-keys.json"
+if exist "%APPDATA%\aralaro\api-keys.json" (
+    del "%APPDATA%\aralaro\api-keys.json"
     echo.
     echo ✓ Deleted api-keys.json
 ) else (
@@ -19,8 +19,8 @@ if exist "%APPDATA%\unity-auto-grader-desktop\api-keys.json" (
     echo  No api-keys.json found
 )
 
-if exist "%APPDATA%\unity-auto-grader-desktop\config.json" (
-    del "%APPDATA%\unity-auto-grader-desktop\config.json"
+if exist "%APPDATA%\aralaro\config.json" (
+    del "%APPDATA%\aralaro\config.json"
     echo ✓ Deleted config.json
 ) else (
     echo  No config.json found

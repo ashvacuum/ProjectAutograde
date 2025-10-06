@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo Unity Auto-Grader - DEBUG MODE
+echo AraLaro - DEBUG MODE
 echo ========================================
 echo.
 echo This mode enables:

@@ -1,4 +1,4 @@
-# Claude Code Wrapper Script for Unity Auto-Grader
+# Claude Code Wrapper Script for AraLaro
 # PowerShell version with better JSON handling
 
 param(
