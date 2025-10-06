@@ -2693,7 +2693,7 @@ class UnityAutoGraderApp {
             }
         }
 
-        feedback += `\n🤖 Generated with Unity Auto-Grader`;
+        feedback += `\n🤖 Generated with AraLaro`;
         return feedback;
     }
 

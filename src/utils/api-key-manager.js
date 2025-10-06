@@ -57,7 +57,7 @@ class APIKeyManager {
 
     getEncryptionKey() {
         const machineId = app.getPath('userData');
-        return crypto.createHash('sha256').update(machineId + 'unity-auto-grader-keys').digest('hex').substr(0, 32);
+        return crypto.createHash('sha256').update(machineId + 'aralaro-keys').digest('hex').substr(0, 32);
     }
 
     async setAPIKey(provider, config) {

@@ -405,12 +405,12 @@ class FileUtils {
     const random = Math.random().toString(36).substring(2, 8);
     const filename = `${baseName}_${timestamp}_${random}${extension}`;
 
-    return path.join(require('os').tmpdir(), 'unity-auto-grader', filename);
+    return path.join(require('os').tmpdir(), 'aralaro', filename);
   }
 
   async cleanupTempFiles(olderThanHours = 24) {
     try {
-      const tempDir = path.join(require('os').tmpdir(), 'unity-auto-grader');
+      const tempDir = path.join(require('os').tmpdir(), 'aralaro');
       const cutoffTime = Date.now() - (olderThanHours * 60 * 60 * 1000);
 
       const files = await this.listFiles(tempDir, { recursive: true });

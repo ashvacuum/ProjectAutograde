@@ -107,7 +107,7 @@ class ResultsExporter {
     // Title
     doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
-    doc.text('Unity Auto-Grader Results Report', margin, yPosition);
+    doc.text('AraLaro Results Report', margin, yPosition);
     yPosition += 15;
 
     // Summary Statistics
