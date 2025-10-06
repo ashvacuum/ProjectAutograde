@@ -5,42 +5,57 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AraLaro</title>
     <style>
-        /* Theme Variables - AraLaro */
+        /* Theme Variables - AraLaro Brand Colors */
         :root {
-            --ciit-primary: #1e293b;
-            --ciit-secondary: #6d28d9;
-            --ciit-tertiary: #14b8a6;
-            --ciit-accent: #14b8a6;
-            --ciit-light: #14b8a6;
-            --ciit-dark: #0f172a;
-            --success-color: #84cc16;
-            --warning-color: #f97316;
-            --achievement-color: #fbbf24;
-            --text-primary: #ffffff;
-            --text-secondary: rgba(255, 255, 255, 0.8);
+            /* Primary Brand Colors (60-70% usage) */
+            --primary-blue: #4338CA;        /* Royal Blue/Indigo - main brand color */
+            --primary-blue-dark: #3730A3;   /* Darker shade for depth */
+            --primary-blue-light: #4F46E5;  /* Lighter shade for highlights */
+
+            /* Accent Color (10-20% usage) */
+            --accent-orange: #F97316;       /* Vibrant Orange - CTAs and highlights */
+            --accent-orange-dark: #EA580C;  /* Darker for hover states */
+            --accent-orange-light: #FF8C00; /* Alternative orange */
+
+            /* Background Colors */
+            --bg-light: #FAFAFA;            /* Light mode background */
+            --bg-light-alt: #F9FAFB;        /* Alternative light background */
+            --bg-dark: #1F2937;             /* Dark mode background */
+            --bg-dark-deep: #111827;        /* Deep slate for contrast */
+
+            /* Text Colors */
+            --text-primary: #1F2937;        /* Dark gray/slate for primary text */
+            --text-secondary: #6B7280;      /* Medium gray for secondary text */
+            --text-on-dark: #F9FAFB;        /* Off-white on dark backgrounds */
+            --text-white: #FFFFFF;
+
+            /* Supporting Colors */
+            --success-green: #10B981;       /* Success/Correct */
+            --error-red: #EF4444;           /* Errors */
+            --warning-amber: #F59E0B;       /* Warnings/Hints */
+            --neutral-purple: #8B5CF6;      /* Secondary accent */
+
+            /* UI Elements */
+            --surface-white: #FFFFFF;       /* Cards/Surfaces */
+            --border-gray: #E5E7EB;         /* Light borders */
+            --shadow: rgba(0, 0, 0, 0.1);   /* Subtle shadows */
+
+            /* Overlays for glassmorphism */
             --overlay-light: rgba(255, 255, 255, 0.1);
             --overlay-medium: rgba(255, 255, 255, 0.15);
             --overlay-dark: rgba(0, 0, 0, 0.3);
-        }
 
-        /* Discord Dark Theme */
-        [data-theme="discord"] {
-            --ciit-primary: #667eea;
-            --ciit-secondary: #764ba2;
-            --ciit-tertiary: #7c5dfa;
-            --ciit-accent: #8b73ff;
-            --ciit-light: #9d88ff;
-            --ciit-dark: #5568d3;
-        }
-
-        /* Professional Blue Theme */
-        [data-theme="professional"] {
-            --ciit-primary: #1e3a5f;
-            --ciit-secondary: #2c5282;
-            --ciit-tertiary: #3d6aa2;
-            --ciit-accent: #4a90e2;
-            --ciit-light: #63b3ed;
-            --ciit-dark: #0f1e33;
+            /* Legacy variable mappings for compatibility */
+            --ciit-primary: var(--bg-dark);
+            --ciit-secondary: var(--primary-blue);
+            --ciit-tertiary: var(--accent-orange);
+            --ciit-accent: var(--primary-blue);
+            --ciit-light: var(--primary-blue-light);
+            --ciit-dark: var(--bg-dark-deep);
+            --success-color: var(--success-green);
+            --warning-color: var(--warning-amber);
+            --achievement-color: var(--accent-orange);
+            --text-secondary-alpha: rgba(255, 255, 255, 0.8);
         }
 
         * {
@@ -51,8 +66,9 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, var(--ciit-primary) 0%, var(--ciit-secondary) 50%, var(--ciit-tertiary) 100%);
-            color: var(--text-primary);
+            /* AraLaro Brand Gradient: Royal Blue dominant (70%), Orange accents (30%) */
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--primary-blue-dark) 50%, var(--accent-orange) 90%, var(--accent-orange-light) 100%);
+            color: var(--text-on-dark);
             overflow: hidden;
             height: 100vh;
         }
@@ -198,9 +214,9 @@
             margin-bottom: 16px;
         }
 
-        /* Button Styles */
+        /* Button Styles - Orange accent for CTAs */
         .btn {
-            background: linear-gradient(135deg, var(--ciit-accent) 0%, var(--ciit-light) 100%);
+            background: linear-gradient(135deg, var(--accent-orange) 0%, var(--accent-orange-dark) 100%);
             border: none;
             border-radius: 8px;
             padding: 12px 24px;
@@ -212,12 +228,13 @@
             text-decoration: none;
             display: inline-block;
             text-align: center;
+            box-shadow: 0 2px 8px rgba(249, 115, 22, 0.3);
         }
 
         .btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-            filter: brightness(1.1);
+            box-shadow: 0 4px 16px rgba(249, 115, 22, 0.5);
+            background: linear-gradient(135deg, var(--accent-orange-light) 0%, var(--accent-orange) 100%);
         }
 
         .btn-secondary {
@@ -315,18 +332,18 @@
         }
 
         .status-connected {
-            background: rgba(132, 204, 22, 0.2);
-            color: var(--success-color);
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success-green);
         }
 
         .status-disconnected {
-            background: rgba(249, 115, 22, 0.2);
-            color: var(--warning-color);
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--error-red);
         }
 
         .status-loading {
-            background: rgba(251, 191, 36, 0.2);
-            color: var(--achievement-color);
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--warning-amber);
         }
 
         /* Grid Layouts */
@@ -362,7 +379,7 @@
 
         .progress-fill {
             height: 100%;
-            background: linear-gradient(90deg, var(--ciit-accent) 0%, var(--ciit-light) 100%);
+            background: linear-gradient(90deg, var(--primary-blue) 0%, var(--primary-blue-light) 100%);
             border-radius: 4px;
             transition: width 0.3s ease;
         }
@@ -664,7 +681,7 @@
         <div class="sidebar">
             <div class="sidebar-header">
                 <h1>AraLaro</h1>
-                <p>Automated Assignment Grading</p>
+                <p style="color: var(--accent-orange); font-weight: 500;">From code to play, graded your way</p>
             </div>
 
             <nav class="nav-menu">
@@ -1108,14 +1125,7 @@
                         <div class="card">
                             <h3>Application</h3>
                             <p>General application settings</p>
-                            <div class="form-group">
-                                <label class="form-label">Theme</label>
-                                <select class="form-input" id="theme-select" onchange="app.changeTheme(this.value)">
-                                    <option value="ciit">CIIT Philippines (Default)</option>
-                                    <option value="professional">Professional Blue</option>
-                                    <option value="discord">Discord Dark</option>
-                                </select>
-                            </div>
+                            <p style="opacity: 0.7; font-size: 14px;">Using AraLaro brand theme</p>
                         </div>
                     </div>
                 </div>
