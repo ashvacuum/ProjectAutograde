@@ -1,6 +1,6 @@
 {
   "name": "aralaro",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "AraLaro - Desktop application for automated Unity game math assignment grading",
   "main": "main.js",
   "scripts": {
