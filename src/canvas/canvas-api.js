@@ -87,7 +87,7 @@ class CanvasAPI {
       const response = await axios.get(`${this.baseUrl}/courses/${courseId}/assignments/${assignmentId}/submissions`, {
         headers: this.headers,
         params: {
-          include: ['user', 'submission_comments'],
+          include: ['user', 'submission_comments', 'submission_history'],
           per_page: 100
         }
       });
@@ -112,6 +112,7 @@ class CanvasAPI {
           user_id: submission.user_id,
           user: submission.user || { name: 'Unknown User', id: submission.user_id },
           submitted_at: submission.submitted_at,
+          graded_at: submission.graded_at,
           github_url: githubUrl,
           githubUrl: githubUrl,
           score: submission.score,
