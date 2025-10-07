@@ -526,8 +526,25 @@ Please provide a detailed analysis and grading based on this information.`;
             console.error(`   Status: ${response.status}`);
             console.error(`   Status Text: ${response.statusText}`);
             console.error(`   Error Body: ${errorText}`);
+
+            // Parse error body for more details
+            let errorDetails = errorText;
+            try {
+              const errorJson = JSON.parse(errorText);
+              errorDetails = errorJson.error?.message || errorJson.message || errorText;
+              console.error(`   Parsed Error: ${errorDetails}`);
+            } catch (e) {
+              // Error body is not JSON, use as-is
+            }
+
+            // Check for authentication issues
+            if (response.status === 401) {
+              console.error('   🔑 AUTHENTICATION ERROR: The API key is invalid or has expired');
+              console.error('   👉 Please go to Settings and update your API key');
+            }
+
             console.log('========================================\n');
-            throw new Error(`Anthropic API error: ${response.status} - ${errorText}`);
+            throw new Error(`Anthropic API error (${response.status}): ${errorDetails}`);
           }
 
           data = await response.json();
@@ -673,8 +690,36 @@ Please provide a detailed analysis and grading based on this information.`;
       }
 
     } catch (error) {
-      console.error(`${config.providerInfo.name} API call failed:`, error);
-      throw error;
+      console.error(`${config.providerInfo?.name || 'LLM'} API call failed:`, error);
+      console.error('Error details:', {
+        message: error.message,
+        name: error.name,
+        code: error.code,
+        cause: error.cause
+      });
+      console.log('========================================\n');
+
+      // Enhance error message for common API issues
+      let enhancedMessage = error.message;
+
+      if (error.message.includes('fetch failed') || error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED')) {
+        enhancedMessage = 'Network error: Unable to reach the API server. Please check your internet connection.';
+      } else if (error.message.includes('401') || error.message.includes('authentication') || error.message.includes('invalid_api_key')) {
+        enhancedMessage = 'Authentication failed: Your API key is invalid or expired. Please update your API key in Settings.';
+      } else if (error.message.includes('403') || error.message.includes('permission')) {
+        enhancedMessage = 'Permission denied: Your API key does not have access to this resource.';
+      } else if (error.message.includes('429') || error.message.includes('rate limit')) {
+        enhancedMessage = 'Rate limit exceeded: Too many requests. Please wait a few moments and try again.';
+      } else if (error.message.includes('500') || error.message.includes('502') || error.message.includes('503')) {
+        enhancedMessage = `API server error: The ${config.providerInfo?.name || 'LLM'} service is currently unavailable. Please try again later.`;
+      } else if (error.message.includes('timeout')) {
+        enhancedMessage = 'Request timeout: The API took too long to respond. Please try again.';
+      }
+
+      const enhancedError = new Error(enhancedMessage);
+      enhancedError.originalError = error;
+      enhancedError.provider = provider;
+      throw enhancedError;
     }
   }
 

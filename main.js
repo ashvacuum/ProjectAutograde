@@ -305,7 +305,26 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
       console.log('   Provider:', llmIntegration.activeProvider?.provider || 'unknown');
 
       console.log('📝 Step 3/3: Sending to LLM for grading...');
-      const gradingResult = await llmIntegration.analyzeUnityProject(analysis, cleanCriteria, cleanAssignmentDetails);
+
+      let gradingResult;
+      try {
+        gradingResult = await llmIntegration.analyzeUnityProject(analysis, cleanCriteria, cleanAssignmentDetails);
+      } catch (llmError) {
+        console.error('❌ LLM grading failed:', llmError.message);
+        console.error('   Provider:', llmError.provider || 'unknown');
+        console.error('   Original error:', llmError.originalError?.message || 'N/A');
+        console.log('========================================\n');
+
+        // Return a more detailed error
+        return {
+          success: false,
+          error: llmError.message,
+          errorType: 'llm_api_error',
+          analysis: analysis,
+          needsInstructorIntervention: true,
+          interventionReason: `API Error: ${llmError.message}`
+        };
+      }
 
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
       console.log('✅ LLM grading complete');
