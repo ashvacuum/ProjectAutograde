@@ -1,5 +1,20 @@
 # AraLaro - TODO List
 
+## System Requirements Note
+
+**Git Installation Required:**
+AraLaro requires Git to be installed and accessible from the command line. The application uses Git to:
+- Clone student repositories from GitHub
+- Analyze repository history and commits
+- Validate Unity project structure
+
+If Git is not installed, grading will fail. Consider adding:
+- Git installation check on first run
+- Clear error message if Git is missing
+- Installation instructions in docs
+
+---
+
 ## High Priority Features
 
 ### Manual Grading Flag for Rubric Items
