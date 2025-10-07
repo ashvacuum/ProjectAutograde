@@ -673,6 +673,68 @@
         .modal-body::-webkit-scrollbar-thumb:hover {
             background: rgba(255, 255, 255, 0.5);
         }
+
+        /* Criteria Builder Styles */
+        .criteria-item-card {
+            background: var(--overlay-light);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            border: 1px solid var(--overlay-medium);
+        }
+
+        .criteria-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .criteria-item-number {
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--accent-orange);
+        }
+
+        .criteria-item-delete {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid rgba(239, 68, 68, 0.5);
+            color: #ef4444;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s ease;
+        }
+
+        .criteria-item-delete:hover {
+            background: rgba(239, 68, 68, 0.3);
+        }
+
+        .rating-item {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            display: grid;
+            grid-template-columns: 2fr 1fr 3fr auto;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .rating-delete-btn {
+            background: rgba(239, 68, 68, 0.2);
+            border: none;
+            color: #ef4444;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .rating-delete-btn:hover {
+            background: rgba(239, 68, 68, 0.3);
+        }
     </style>
 </head>
 <body>
@@ -680,7 +742,10 @@
         <!-- Sidebar -->
         <div class="sidebar">
             <div class="sidebar-header">
-                <h1>AraLaro</h1>
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                    <img src="../../assets/icon.ico" alt="AraLaro Logo" style="width: 40px; height: 40px;">
+                    <h1 style="margin: 0; font-family: sans-serif;">AraLaro</h1>
+                </div>
                 <p style="color: var(--accent-orange); font-weight: 500;">From code to play, graded your way</p>
             </div>
 
@@ -1145,6 +1210,51 @@
             </div>
             <div class="modal-body" id="modal-body">
                 <!-- Content will be dynamically inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Criteria Builder/Editor Modal -->
+    <div class="modal-overlay" id="criteria-modal" style="display: none;">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <h2 id="criteria-modal-title">Create New Criteria</h2>
+                <button class="modal-close" onclick="app.closeCriteriaModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="criteria-form">
+                    <div class="form-group">
+                        <label class="form-label" for="criteria-name">Rubric Name *</label>
+                        <input type="text" class="form-input" id="criteria-name" required
+                               placeholder="e.g., Unity Game Programming - Vectors">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="criteria-description">Description</label>
+                        <input type="text" class="form-input" id="criteria-description"
+                               placeholder="Brief description of this rubric">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Criteria Items</label>
+                        <div id="criteria-items-container">
+                            <!-- Criteria items will be added here dynamically -->
+                        </div>
+                        <button type="button" class="btn btn-secondary" onclick="app.addCriteriaItem()" style="margin-top: 12px;">
+                            + Add Criteria Item
+                        </button>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 24px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.1);">
+                        <div style="font-size: 18px; font-weight: 600;">
+                            Total Points: <span id="criteria-total-points">0</span>
+                        </div>
+                        <div style="display: flex; gap: 12px;">
+                            <button type="button" class="btn btn-secondary" onclick="app.closeCriteriaModal()">Cancel</button>
+                            <button type="submit" class="btn" id="save-criteria-btn">Save Criteria</button>
+                        </div>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
