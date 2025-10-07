@@ -55,16 +55,15 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'src', 'renderer', 'index.html'));
 
   // Filter out autofill console errors using the new event format
-  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+  mainWindow.webContents.on('console-message', (event) => {
     // Suppress autofill-related console errors
-    if (message && (message.includes('Autofill.enable') || message.includes('Autofill.setAddresses'))) {
-      event.preventDefault?.();
+    if (event.message && (event.message.includes('Autofill.enable') || event.message.includes('Autofill.setAddresses'))) {
       return;
     }
 
     // Log other console messages in development
-    if (isDev && level >= 2) { // Only show warnings and errors
-      console.log(`Console [${level}]:`, message);
+    if (isDev && event.level >= 2) { // Only show warnings and errors
+      console.log(`Console [${event.level}]:`, event.message);
     }
   });
 

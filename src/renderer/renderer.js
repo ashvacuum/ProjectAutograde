@@ -13,6 +13,14 @@ class UnityAutoGraderApp {
 
     async init() {
         this.setupEventListeners();
+
+        // Check if this is first time use
+        const isFirstTimeUser = await this.checkFirstTimeUse();
+        if (isFirstTimeUser) {
+            this.showFTUEModal();
+            return; // Don't continue initialization until FTUE is complete
+        }
+
         await this.checkStoredCanvasAuth();
         await this.checkLLMStatus();
         this.loadDashboardData();
@@ -30,6 +38,15 @@ class UnityAutoGraderApp {
                 this.showPanel(panel);
             });
         });
+
+        // FTUE Form
+        const ftueForm = document.getElementById('ftue-form');
+        if (ftueForm) {
+            ftueForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.completeFTUESetup();
+            });
+        }
 
         // Canvas Authentication Form
         const canvasAuthForm = document.getElementById('canvas-auth-form');
@@ -3319,10 +3336,150 @@ class UnityAutoGraderApp {
             toast.classList.remove('show');
         }, 4000);
     }
+    // FTUE (First Time User Experience) Methods
+    async checkFirstTimeUse() {
+        try {
+            // Check if Canvas auth and API key exist
+            const canvasUser = await window.electronAPI.store.get('canvas.user');
+            const apiKeys = await window.electronAPI.apiKeys.getAll();
+
+            // If no Canvas auth or no API keys, this is first time use
+            const hasCanvas = !!canvasUser;
+            const hasAIKey = apiKeys.success && Object.keys(apiKeys.keys).length > 0;
+
+            return !hasCanvas || !hasAIKey;
+        } catch (error) {
+            console.error('Error checking first time use:', error);
+            return false;
+        }
+    }
+
+    showFTUEModal() {
+        const modal = document.getElementById('ftue-modal');
+        if (modal) {
+            modal.style.display = 'flex';
+        }
+    }
+
+    hideFTUEModal() {
+        const modal = document.getElementById('ftue-modal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    }
+
+    async completeFTUESetup() {
+        const submitBtn = document.getElementById('ftue-submit-btn');
+        const errorDiv = document.getElementById('ftue-error');
+
+        try {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Setting up...';
+            errorDiv.style.display = 'none';
+
+            // Get form values
+            const canvasUrl = document.getElementById('ftue-canvas-url').value.trim();
+            const canvasToken = document.getElementById('ftue-canvas-token').value.trim();
+            const aiProvider = document.getElementById('ftue-ai-provider').value;
+            const aiKey = document.getElementById('ftue-ai-key').value.trim();
+
+            // Validate inputs
+            if (!canvasUrl || !canvasToken || !aiProvider || !aiKey) {
+                throw new Error('All fields are required');
+            }
+
+            // Step 1: Authenticate with Canvas
+            const canvasResult = await window.electronAPI.canvas.authenticate(canvasUrl, canvasToken);
+            if (!canvasResult.success) {
+                throw new Error(`Canvas authentication failed: ${canvasResult.error}`);
+            }
+
+            // Step 2: Save AI API key
+            const apiConfig = {
+                apiKey: aiKey,
+                providerInfo: {
+                    name: this.getProviderName(aiProvider)
+                }
+            };
+
+            // Add Azure-specific fields if needed
+            if (aiProvider === 'azure') {
+                const endpoint = document.getElementById('ftue-azure-endpoint').value.trim();
+                const deployment = document.getElementById('ftue-azure-deployment').value.trim();
+
+                if (!endpoint || !deployment) {
+                    throw new Error('Azure endpoint and deployment name are required');
+                }
+
+                apiConfig.endpoint = endpoint;
+                apiConfig.deploymentName = deployment;
+            }
+
+            const apiKeyResult = await window.electronAPI.apiKeys.set(aiProvider, apiConfig);
+            if (!apiKeyResult.success) {
+                throw new Error(`Failed to save AI API key: ${apiKeyResult.error}`);
+            }
+
+            // Set as active provider
+            await window.electronAPI.apiKeys.toggle(aiProvider, true);
+
+            // Mark FTUE as completed
+            await window.electronAPI.store.set('ftue.completed', true);
+
+            // Hide modal and complete initialization
+            this.hideFTUEModal();
+            this.showToast('Setup completed successfully!', 'success');
+
+            // Continue with normal initialization
+            await this.checkStoredCanvasAuth();
+            await this.checkLLMStatus();
+            this.loadDashboardData();
+            this.currentEditingProvider = null;
+            this.supportedProviders = {};
+            await this.loadTheme();
+
+        } catch (error) {
+            console.error('FTUE setup error:', error);
+            errorDiv.textContent = error.message;
+            errorDiv.style.display = 'block';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Complete Setup';
+        }
+    }
+
+    getProviderName(provider) {
+        const names = {
+            'anthropic': 'Anthropic (Claude)',
+            'openai': 'OpenAI',
+            'google': 'Google AI (Gemini)',
+            'azure': 'Azure OpenAI'
+        };
+        return names[provider] || provider;
+    }
 }
 
 // Global functions for HTML onclick handlers
 window.showPanel = (panel) => window.app.showPanel(panel);
+window.updateFTUEAIFields = () => {
+    const provider = document.getElementById('ftue-ai-provider').value;
+    const azureFields = document.getElementById('ftue-azure-fields');
+    const helpText = document.getElementById('ftue-ai-key-help');
+
+    if (provider === 'azure') {
+        azureFields.style.display = 'block';
+        helpText.textContent = 'Your Azure OpenAI API key';
+    } else {
+        azureFields.style.display = 'none';
+
+        const helpTexts = {
+            'anthropic': 'Get your API key from https://console.anthropic.com',
+            'openai': 'Get your API key from https://platform.openai.com',
+            'google': 'Get your API key from https://makersuite.google.com/app/apikey'
+        };
+
+        helpText.textContent = helpTexts[provider] || 'This key will be used to power automated grading';
+    }
+};
 window.testCanvasConnection = () => window.app.testCanvasConnection();
 window.createNewCriteria = () => window.app.showToast('Criteria builder coming soon!', 'info');
 window.loadDefaultCriteria = () => window.app.loadDefaultCriteria();
