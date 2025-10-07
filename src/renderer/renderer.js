@@ -66,6 +66,15 @@ class UnityAutoGraderApp {
             });
         }
 
+        // Criteria Form
+        const criteriaForm = document.getElementById('criteria-form');
+        if (criteriaForm) {
+            criteriaForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.saveCriteriaTemplate();
+            });
+        }
+
         // Late Penalty Settings Event Listeners
         const penaltyPerDaySelect = document.getElementById('penalty-per-day');
         const maxPenaltySelect = document.getElementById('max-penalty');
@@ -960,9 +969,13 @@ class UnityAutoGraderApp {
         // Update submission counts when skip-graded checkbox changes
         const skipGradedCheckbox = document.getElementById('batch-skip-graded');
         const updateCounts = () => {
-            const ungradedCount = submissions.filter(sub =>
-                !sub.score && sub.score !== 0 && !sub.grade
-            ).length;
+            // Count ungraded submissions (those with score <= 0, since Canvas defaults to 0)
+            const ungradedCount = submissions.filter(sub => {
+                const score = parseFloat(sub.score);
+                const hasPositiveScore = !isNaN(score) && score > 0;
+                return !hasPositiveScore; // Count as ungraded if score is 0 or not set
+            }).length;
+
             const ungradedCountSpan = document.getElementById('ungraded-count');
             const totalCountSpan = document.getElementById('total-count');
 
@@ -1041,13 +1054,29 @@ class UnityAutoGraderApp {
         let submissionsToGrade = this.currentAssignment.submissions;
         if (skipGraded) {
             const originalCount = submissionsToGrade.length;
-            submissionsToGrade = submissionsToGrade.filter(sub =>
-                !sub.score && sub.score !== 0 && !sub.grade
-            );
+            console.log(`📊 Checking ${originalCount} submissions for existing grades...`);
+
+            // A submission is considered "needs grading" if:
+            // 1. Score is 0 (could be ungraded or legitimate fail - better to regrade)
+            // 2. Score is null/undefined (definitely not graded)
+            // Skip only if score > 0 (has been meaningfully graded)
+            submissionsToGrade = submissionsToGrade.filter((sub, idx) => {
+                const score = parseFloat(sub.score);
+                const hasPositiveScore = !isNaN(score) && score > 0;
+
+                if (hasPositiveScore) {
+                    console.log(`  ⏭️  Skipping ${sub.user?.name || 'Unknown'}: score=${sub.score} (already graded with score > 0)`);
+                    return false; // Skip - has been graded with a real score
+                }
+
+                // Include submissions with score=0 or no score
+                console.log(`  📝 Including ${sub.user?.name || 'Unknown'}: score=${sub.score} (will grade/regrade)`);
+                return true; // Keep for grading
+            });
             const skippedCount = originalCount - submissionsToGrade.length;
 
-            console.log(`📊 Filtering: ${submissionsToGrade.length} ungraded / ${originalCount} total`);
-            console.log(`⏭️  Skipping ${skippedCount} already-graded submission(s)`);
+            console.log(`📊 Result: ${submissionsToGrade.length} ungraded / ${originalCount} total`);
+            console.log(`⏭️  Skipped ${skippedCount} already-graded submission(s)`);
 
             if (submissionsToGrade.length === 0) {
                 this.showToast('All submissions have already been graded. Uncheck "Skip already-graded" to regrade.', 'info');
@@ -1163,9 +1192,18 @@ class UnityAutoGraderApp {
 
                         if (result.success) {
                             console.log('Grade extracted:', result.grade);
-                            this.gradingResults.push({
+
+                            // Check for duplicates before adding
+                            const existingIndex = this.gradingResults.findIndex(r =>
+                                r.userId === submission.user_id &&
+                                r.courseId === this.currentAssignment.courseId &&
+                                r.assignmentId === this.currentAssignment.assignmentId
+                            );
+
+                            const resultData = {
                                 studentName: submission.user?.name || 'Unknown Student',
                                 userId: submission.user_id,
+                                studentId: submission.user_id,
                                 githubUrl,
                                 grade: result.grade,
                                 result: result.analysis,
@@ -1175,12 +1213,32 @@ class UnityAutoGraderApp {
                                 errorType: result.errorType || null,
                                 courseId: this.currentAssignment.courseId,
                                 assignmentId: this.currentAssignment.assignmentId
-                            });
+                            };
+
+                            if (existingIndex >= 0) {
+                                console.log(`♻️  Replacing existing result for ${resultData.studentName}`);
+                                this.gradingResults[existingIndex] = resultData;
+                            } else {
+                                this.gradingResults.push(resultData);
+                            }
                         } else {
                             console.error('❌ Analysis failed:', result.error);
-                            this.gradingResults.push({
-                                studentName: submission.user?.name || 'Unknown Student',
+
+                            // Show error notification for this specific submission
+                            const studentName = submission.user?.name || 'Unknown Student';
+                            this.showToast(`Failed to grade ${studentName}: ${result.error}`, 'error');
+
+                            // Check for duplicates before adding
+                            const existingIndex = this.gradingResults.findIndex(r =>
+                                r.userId === submission.user_id &&
+                                r.courseId === this.currentAssignment.courseId &&
+                                r.assignmentId === this.currentAssignment.assignmentId
+                            );
+
+                            const errorData = {
+                                studentName,
                                 userId: submission.user_id,
+                                studentId: submission.user_id,
                                 githubUrl,
                                 error: result.error || 'Analysis failed',
                                 needsInstructorIntervention: true,
@@ -1188,28 +1246,91 @@ class UnityAutoGraderApp {
                                 errorType: result.errorType || 'analysis_failed',
                                 courseId: this.currentAssignment.courseId,
                                 assignmentId: this.currentAssignment.assignmentId
-                            });
+                            };
+
+                            // Auto-post 0.1 score for private/inaccessible repositories
+                            if (result.errorType === 'private_repo' || result.errorType === 'not_found') {
+                                console.log(`🔒 Auto-posting 0.1 score for inaccessible repository: ${studentName}`);
+                                try {
+                                    const comment = result.errorType === 'private_repo'
+                                        ? 'Your repository is private or inaccessible. Please make it public and resubmit. Scored 0.1 until repository is accessible.'
+                                        : 'Repository not found or URL is incorrect. Please verify your GitHub URL and resubmit. Scored 0.1 until valid repository is provided.';
+
+                                    await window.electronAPI.canvas.postGrade(
+                                        this.currentAssignment.courseId,
+                                        this.currentAssignment.assignmentId,
+                                        submission.user_id,
+                                        0.1,
+                                        comment
+                                    );
+
+                                    errorData.autoPosted = true;
+                                    errorData.postedScore = 0.1;
+                                    console.log(`✅ Auto-posted 0.1 score to Canvas for ${studentName}`);
+                                } catch (postError) {
+                                    console.error(`❌ Failed to auto-post grade for ${studentName}:`, postError);
+                                    errorData.autoPostError = postError.message;
+                                }
+                            }
+
+                            if (existingIndex >= 0) {
+                                console.log(`♻️  Replacing existing error result for ${errorData.studentName}`);
+                                this.gradingResults[existingIndex] = errorData;
+                            } else {
+                                this.gradingResults.push(errorData);
+                            }
                         }
                     } catch (error) {
                         console.error(`❌ Error grading ${githubUrl}:`, error);
                         console.error('Error stack:', error.stack);
-                        this.gradingResults.push({
-                            studentName: submission.user?.name || 'Unknown Student',
+
+                        // Show error notification for this specific submission
+                        const studentName = submission.user?.name || 'Unknown Student';
+                        this.showToast(`Error grading ${studentName}: ${error.message}`, 'error');
+
+                        // Check for duplicates before adding
+                        const existingIndex = this.gradingResults.findIndex(r =>
+                            r.userId === submission.user_id &&
+                            r.courseId === this.currentAssignment.courseId &&
+                            r.assignmentId === this.currentAssignment.assignmentId
+                        );
+
+                        const exceptionData = {
+                            studentName,
                             userId: submission.user_id,
+                            studentId: submission.user_id,
                             githubUrl,
                             error: error.message,
                             needsInstructorIntervention: true,
                             interventionReason: 'Grading error occurred',
                             courseId: this.currentAssignment.courseId,
                             assignmentId: this.currentAssignment.assignmentId
-                        });
+                        };
+
+                        if (existingIndex >= 0) {
+                            console.log(`♻️  Replacing existing exception result for ${exceptionData.studentName}`);
+                            this.gradingResults[existingIndex] = exceptionData;
+                        } else {
+                            this.gradingResults.push(exceptionData);
+                        }
                     }
                 } else {
                     console.log(`⏭️  Skipping submission ${i + 1} - no GitHub URL`);
                 }
             }
 
-            this.showToast(`Batch grading completed! Processed ${this.gradingResults.length} submissions`, 'success');
+            // Count successful and failed gradings
+            const successCount = this.gradingResults.filter(r => r.grade && !r.error).length;
+            const errorCount = this.gradingResults.filter(r => r.error).length;
+
+            // Show appropriate message based on results
+            if (errorCount === 0) {
+                this.showToast(`Batch grading completed successfully! Processed ${successCount} submissions`, 'success');
+            } else if (successCount === 0) {
+                this.showToast(`Batch grading failed! All ${errorCount} submissions had errors. Check the results panel for details.`, 'error');
+            } else {
+                this.showToast(`Batch grading completed with ${successCount} successful and ${errorCount} failed submissions. Check the results panel for details.`, 'warning');
+            }
 
             // Navigate to results
             this.showPanel('results');
@@ -1460,7 +1581,14 @@ class UnityAutoGraderApp {
 
                 console.log('========================================\n');
 
-                this.gradingResults.push({
+                // Check for duplicates before adding
+                const existingIndex = this.gradingResults.findIndex(r =>
+                    r.studentId === studentId &&
+                    r.courseId === courseId &&
+                    r.assignmentId === assignmentId
+                );
+
+                const resultData = {
                     studentName: submissionData.user?.name || submissionData.user?.sortable_name || `User ${studentId}`,
                     studentId: studentId,
                     submissionId: submissionData.id,
@@ -1474,7 +1602,15 @@ class UnityAutoGraderApp {
                     needsInstructorIntervention: result.needsInstructorIntervention || false,
                     interventionReason: result.interventionReason || null,
                     errorType: result.errorType || null
-                });
+                };
+
+                if (existingIndex >= 0) {
+                    console.log(`♻️  Replacing existing result for ${resultData.studentName}`);
+                    this.gradingResults[existingIndex] = resultData;
+                } else {
+                    console.log(`➕ Adding new result for ${resultData.studentName}`);
+                    this.gradingResults.push(resultData);
+                }
 
                 this.showToast('Individual grading completed successfully!', 'success');
 
@@ -1490,6 +1626,30 @@ class UnityAutoGraderApp {
                 console.error('   Error:', result.error);
                 console.log('========================================\n');
                 this.showToast(`Grading failed: ${result.error}`, 'error');
+
+                // Auto-post 0.1 score for private/inaccessible repositories
+                if (result.errorType === 'private_repo' || result.errorType === 'not_found') {
+                    console.log(`🔒 Auto-posting 0.1 score for inaccessible repository`);
+                    try {
+                        const comment = result.errorType === 'private_repo'
+                            ? 'Your repository is private or inaccessible. Please make it public and resubmit. Scored 0.1 until repository is accessible.'
+                            : 'Repository not found or URL is incorrect. Please verify your GitHub URL and resubmit. Scored 0.1 until valid repository is provided.';
+
+                        await window.electronAPI.canvas.postGrade(
+                            courseId,
+                            assignmentId,
+                            studentId,
+                            0.1,
+                            comment
+                        );
+
+                        console.log(`✅ Auto-posted 0.1 score to Canvas`);
+                        this.showToast('Posted 0.1 score for inaccessible repository', 'info');
+                    } catch (postError) {
+                        console.error(`❌ Failed to auto-post grade:`, postError);
+                        this.showToast(`Failed to post grade: ${postError.message}`, 'error');
+                    }
+                }
             }
 
         } catch (error) {
@@ -1905,7 +2065,7 @@ class UnityAutoGraderApp {
                                 ${template.items.map(item => `${item.name} (${item.points}pts)`).join(' • ')}
                             </div>
                             <div style="margin-top: 16px;">
-                                <button class="btn btn-secondary" onclick="app.editCriteria(${index})">Edit</button>
+                                <button class="btn btn-secondary" onclick="app.editCriteria('${template.id}')">Edit</button>
                                 <button class="btn btn-secondary" onclick="app.deleteCriteria(${index})" style="margin-left: 8px;">Delete</button>
                                 <button class="btn" onclick="app.previewCriteria(${index})" style="margin-left: 8px;">Preview</button>
                             </div>
@@ -1946,18 +2106,7 @@ class UnityAutoGraderApp {
         }
     }
 
-    async editCriteria(index) {
-        try {
-            const templates = await window.electronAPI.store.get('criteria.templates') || [];
-            if (index >= 0 && index < templates.length) {
-                const template = templates[index];
-                this.showToast(`Edit functionality for "${template.name}" coming soon!`, 'info');
-                // TODO: Implement criteria editing modal/form
-            }
-        } catch (error) {
-            this.showToast(`Error editing criteria: ${error.message}`, 'error');
-        }
-    }
+    // editCriteria is now handled by showCriteriaModal(criteriaId)
 
     async deleteCriteria(index) {
         try {
@@ -2117,6 +2266,7 @@ class UnityAutoGraderApp {
                             `<button class="btn" onclick="app.openCanvasSubmission(${originalIndex})" style="margin-left: 8px;">Review in Canvas</button>` :
                             `<button class="btn" onclick="app.postGradeToCanvas(${originalIndex})" style="margin-left: 8px;">Post to Canvas</button>`
                         }
+                        <button class="btn btn-secondary" onclick="app.regradeSubmission(${originalIndex})" style="margin-left: 8px;">Regrade</button>
                     </td>
                 </tr>
             `;
@@ -2342,8 +2492,8 @@ class UnityAutoGraderApp {
         }
 
         // Grade Information
-        if (result.grade && result.grade.result) {
-            const grade = result.grade.result;
+        if (result.grade) {
+            const grade = result.grade;
 
             // Grade Summary
             detailsHtml += `
@@ -2517,8 +2667,19 @@ class UnityAutoGraderApp {
 
     async openCanvasSubmission(index) {
         const result = this.gradingResults[index];
-        if (!result || !this.currentAssignment) {
-            this.showToast('Cannot open Canvas submission - missing data', 'error');
+        if (!result) {
+            this.showToast('Cannot open Canvas submission - result not found', 'error');
+            return;
+        }
+
+        // Use courseId/assignmentId from the result itself (stored when graded)
+        const courseId = result.courseId;
+        const assignmentId = result.assignmentId;
+        const userId = result.studentId || result.userId;
+
+        if (!courseId || !assignmentId || !userId) {
+            this.showToast('Cannot open Canvas submission - missing course/assignment/user ID', 'error');
+            console.error('Missing data:', { courseId, assignmentId, userId, result });
             return;
         }
 
@@ -2532,7 +2693,7 @@ class UnityAutoGraderApp {
 
             // Extract base URL (remove /api/v1 if present)
             const baseUrl = canvasBaseUrl.replace('/api/v1', '');
-            const submissionUrl = `${baseUrl}/courses/${this.currentAssignment.courseId}/assignments/${this.currentAssignment.assignmentId}/submissions/${result.userId}`;
+            const submissionUrl = `${baseUrl}/courses/${courseId}/assignments/${assignmentId}/submissions/${userId}`;
 
             // Open in external browser
             await window.electronAPI.openExternal(submissionUrl);
@@ -2673,6 +2834,133 @@ class UnityAutoGraderApp {
             console.error('❌ Exception posting grade:', error);
             console.log('========================================\n');
             this.showToast(`Error posting grade to Canvas: ${error.message}`, 'error');
+        }
+    }
+
+    async regradeSubmission(index) {
+        const result = this.gradingResults[index];
+
+        if (!result) {
+            this.showToast('Cannot regrade - result not found', 'error');
+            return;
+        }
+
+        if (!result.githubUrl) {
+            this.showToast('Cannot regrade - no GitHub URL', 'error');
+            return;
+        }
+
+        console.log('\n========================================');
+        console.log('🔄 REGRADING SUBMISSION');
+        console.log('========================================');
+        console.log('Student:', result.studentName);
+        console.log('GitHub URL:', result.githubUrl);
+        console.log('Previous Status:', result.needsInstructorIntervention ? 'Needs Review' : 'Graded');
+
+        const confirmRegrade = confirm(`Regrade submission for ${result.studentName}?\n\nThis will re-analyze the repository and update the grade.`);
+
+        if (!confirmRegrade) {
+            console.log('❌ Regrade cancelled by user');
+            return;
+        }
+
+        this.showToast(`Starting regrade for ${result.studentName}...`, 'info');
+
+        try {
+            // Get course and assignment info
+            const courseId = result.courseId;
+            const assignmentId = result.assignmentId;
+            const userId = result.studentId || result.userId;
+
+            if (!courseId || !assignmentId || !userId) {
+                this.showToast('Missing course/assignment info for regrade', 'error');
+                return;
+            }
+
+            // Get criteria - try to use stored criteria or load from templates
+            let criteria;
+            if (result.criteria) {
+                criteria = result.criteria;
+            } else {
+                // Load default or first available criteria
+                const templates = await window.electronAPI.store.get('criteria.templates') || [];
+                if (templates.length > 0) {
+                    criteria = templates[0];
+                } else {
+                    criteria = this.getDefaultCriteria();
+                }
+            }
+
+            // Fetch submission details for assignment context
+            let assignmentContext = null;
+            try {
+                const submissionResult = await window.electronAPI.canvas.getSubmission(courseId, assignmentId, userId);
+                if (submissionResult.success) {
+                    assignmentContext = {
+                        assignment_id: assignmentId,
+                        user_id: userId,
+                        submitted_at: submissionResult.submission.submitted_at,
+                        due_at: submissionResult.submission.assignment?.due_at
+                    };
+                }
+            } catch (error) {
+                console.warn('Could not fetch submission details:', error);
+            }
+
+            // Perform regrading
+            console.log('📡 Calling grader.analyzeProject for regrade...');
+            const regradeResult = await window.electronAPI.grader.analyzeProject(
+                result.githubUrl,
+                criteria,
+                assignmentContext
+            );
+
+            console.log('📥 Regrade result received:', regradeResult.success);
+
+            if (regradeResult.success) {
+                // Update the existing result
+                result.grade = regradeResult.grade;
+                result.analysis = regradeResult.analysis;
+                result.latePenalty = regradeResult.latePenalty;
+                result.needsInstructorIntervention = regradeResult.needsInstructorIntervention || false;
+                result.interventionReason = regradeResult.interventionReason || null;
+                result.errorType = regradeResult.errorType || null;
+                result.error = null; // Clear any previous errors
+                result.regradedAt = new Date().toISOString();
+
+                console.log('✅ Result updated successfully');
+                this.showToast(`Regrade completed for ${result.studentName}!`, 'success');
+
+                // Auto-save updated results
+                await this.saveGradingResults();
+
+                // Refresh display
+                this.loadGradingResults();
+            } else {
+                console.error('❌ Regrade failed:', regradeResult.error);
+
+                // Check if it's still a private/inaccessible repo
+                if (regradeResult.errorType === 'private_repo' || regradeResult.errorType === 'not_found') {
+                    this.showToast(`Repository still inaccessible for ${result.studentName}`, 'warning');
+
+                    // Update error info
+                    result.error = regradeResult.error;
+                    result.errorType = regradeResult.errorType;
+                    result.interventionReason = regradeResult.interventionReason;
+                    result.regradedAt = new Date().toISOString();
+
+                    await this.saveGradingResults();
+                    this.loadGradingResults();
+                } else {
+                    this.showToast(`Regrade failed: ${regradeResult.error}`, 'error');
+                }
+            }
+
+            console.log('========================================\n');
+
+        } catch (error) {
+            console.error('❌ Regrade exception:', error);
+            this.showToast(`Error during regrade: ${error.message}`, 'error');
         }
     }
 
@@ -3456,6 +3744,280 @@ class UnityAutoGraderApp {
         };
         return names[provider] || provider;
     }
+
+    // Criteria Builder Methods
+    showCriteriaModal(criteriaId = null) {
+        const modal = document.getElementById('criteria-modal');
+        const title = document.getElementById('criteria-modal-title');
+
+        this.currentEditingCriteriaId = criteriaId;
+
+        if (criteriaId) {
+            title.textContent = 'Edit Criteria';
+            this.loadCriteriaForEditing(criteriaId);
+        } else {
+            title.textContent = 'Create New Criteria';
+            this.resetCriteriaForm();
+            // Add one default criteria item
+            this.addCriteriaItem();
+        }
+
+        modal.style.display = 'flex';
+    }
+
+    closeCriteriaModal() {
+        const modal = document.getElementById('criteria-modal');
+        modal.style.display = 'none';
+        this.resetCriteriaForm();
+        this.currentEditingCriteriaId = null;
+    }
+
+    resetCriteriaForm() {
+        document.getElementById('criteria-name').value = '';
+        document.getElementById('criteria-description').value = '';
+        document.getElementById('criteria-items-container').innerHTML = '';
+        this.updateTotalPoints();
+    }
+
+    async loadCriteriaForEditing(criteriaId) {
+        try {
+            const templates = await window.electronAPI.store.get('criteria.templates') || [];
+            const template = templates.find(t => t.id === criteriaId);
+
+            if (template) {
+                document.getElementById('criteria-name').value = template.name;
+                document.getElementById('criteria-description').value = template.description || '';
+
+                // Load items
+                document.getElementById('criteria-items-container').innerHTML = '';
+                template.items.forEach(item => {
+                    this.addCriteriaItem(item);
+                });
+
+                this.updateTotalPoints();
+            }
+        } catch (error) {
+            this.showToast(`Error loading criteria: ${error.message}`, 'error');
+        }
+    }
+
+    addCriteriaItem(itemData = null) {
+        const container = document.getElementById('criteria-items-container');
+        const itemIndex = container.children.length;
+
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'criteria-item-card';
+        itemDiv.dataset.itemIndex = itemIndex;
+
+        itemDiv.innerHTML = `
+            <div class="criteria-item-header">
+                <div class="criteria-item-number">Item #${itemIndex + 1}</div>
+                <button type="button" class="criteria-item-delete" onclick="app.removeCriteriaItem(${itemIndex})">
+                    Remove
+                </button>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Item Name *</label>
+                <input type="text" class="form-input" name="item-name" required
+                       placeholder="e.g., Code Quality" value="${itemData?.name || ''}">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <input type="text" class="form-input" name="item-description"
+                       placeholder="Brief description" value="${itemData?.description || ''}">
+            </div>
+
+            <div class="grid-2">
+                <div class="form-group">
+                    <label class="form-label">Points *</label>
+                    <input type="number" class="form-input item-points" name="item-points" required min="0" step="0.1"
+                           placeholder="10" value="${itemData?.points || ''}" onchange="app.updateTotalPoints()">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Weight</label>
+                    <select class="form-input" name="item-weight">
+                        <option value="low" ${itemData?.weight === 'low' ? 'selected' : ''}>Low</option>
+                        <option value="medium" ${itemData?.weight === 'medium' ? 'selected' : ''}>Medium</option>
+                        <option value="high" ${itemData?.weight === 'high' ? 'selected' : ''}>High</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Ratings (optional - for rubric levels)</label>
+                <div class="ratings-container" data-item-index="${itemIndex}">
+                    ${itemData?.ratings ? itemData.ratings.map((rating, idx) => this.createRatingHTML(itemIndex, idx, rating)).join('') : ''}
+                </div>
+                <button type="button" class="btn btn-secondary" onclick="app.addRating(${itemIndex})" style="margin-top: 8px; padding: 8px 16px; font-size: 13px;">
+                    + Add Rating Level
+                </button>
+            </div>
+        `;
+
+        container.appendChild(itemDiv);
+        this.updateItemNumbers();
+        this.updateTotalPoints();
+    }
+
+    createRatingHTML(itemIndex, ratingIndex, ratingData = null) {
+        return `
+            <div class="rating-item" data-rating-index="${ratingIndex}">
+                <input type="text" class="form-input" placeholder="Rating name" value="${ratingData?.name || ''}" style="font-size: 13px; padding: 8px;">
+                <input type="number" class="form-input" placeholder="Points" value="${ratingData?.points || ''}" min="0" step="0.1" style="font-size: 13px; padding: 8px;">
+                <input type="text" class="form-input" placeholder="Description" value="${ratingData?.description || ''}" style="font-size: 13px; padding: 8px;">
+                <button type="button" class="rating-delete-btn" onclick="app.removeRating(${itemIndex}, ${ratingIndex})">×</button>
+            </div>
+        `;
+    }
+
+    addRating(itemIndex) {
+        const container = document.querySelector(`.ratings-container[data-item-index="${itemIndex}"]`);
+        const ratingIndex = container.querySelectorAll('.rating-item').length;
+
+        const ratingDiv = document.createElement('div');
+        ratingDiv.innerHTML = this.createRatingHTML(itemIndex, ratingIndex);
+        container.appendChild(ratingDiv.firstElementChild);
+    }
+
+    removeRating(itemIndex, ratingIndex) {
+        const container = document.querySelector(`.ratings-container[data-item-index="${itemIndex}"]`);
+        const ratings = container.querySelectorAll('.rating-item');
+        if (ratings[ratingIndex]) {
+            ratings[ratingIndex].remove();
+        }
+    }
+
+    removeCriteriaItem(itemIndex) {
+        const container = document.getElementById('criteria-items-container');
+        const items = container.querySelectorAll('.criteria-item-card');
+        if (items[itemIndex]) {
+            items[itemIndex].remove();
+            this.updateItemNumbers();
+            this.updateTotalPoints();
+        }
+    }
+
+    updateItemNumbers() {
+        const container = document.getElementById('criteria-items-container');
+        const items = container.querySelectorAll('.criteria-item-card');
+        items.forEach((item, index) => {
+            item.dataset.itemIndex = index;
+            const numberEl = item.querySelector('.criteria-item-number');
+            if (numberEl) {
+                numberEl.textContent = `Item #${index + 1}`;
+            }
+        });
+    }
+
+    updateTotalPoints() {
+        const pointsInputs = document.querySelectorAll('.item-points');
+        let total = 0;
+        pointsInputs.forEach(input => {
+            const value = parseFloat(input.value) || 0;
+            total += value;
+        });
+        document.getElementById('criteria-total-points').textContent = total.toFixed(1);
+    }
+
+    async saveCriteriaTemplate() {
+        try {
+            const name = document.getElementById('criteria-name').value.trim();
+            const description = document.getElementById('criteria-description').value.trim();
+
+            if (!name) {
+                this.showToast('Please enter a rubric name', 'warning');
+                return;
+            }
+
+            // Collect all criteria items
+            const container = document.getElementById('criteria-items-container');
+            const items = [];
+
+            container.querySelectorAll('.criteria-item-card').forEach((itemCard, idx) => {
+                const itemName = itemCard.querySelector('[name="item-name"]').value.trim();
+                const itemDesc = itemCard.querySelector('[name="item-description"]').value.trim();
+                const itemPoints = parseFloat(itemCard.querySelector('[name="item-points"]').value) || 0;
+                const itemWeight = itemCard.querySelector('[name="item-weight"]').value;
+
+                if (!itemName || itemPoints === 0) {
+                    return; // Skip invalid items
+                }
+
+                // Collect ratings for this item
+                const ratings = [];
+                const ratingsContainer = itemCard.querySelector('.ratings-container');
+                if (ratingsContainer) {
+                    ratingsContainer.querySelectorAll('.rating-item').forEach(ratingEl => {
+                        const inputs = ratingEl.querySelectorAll('input');
+                        const ratingName = inputs[0]?.value.trim();
+                        const ratingPoints = parseFloat(inputs[1]?.value) || 0;
+                        const ratingDesc = inputs[2]?.value.trim();
+
+                        if (ratingName) {
+                            ratings.push({
+                                name: ratingName,
+                                points: ratingPoints,
+                                description: ratingDesc
+                            });
+                        }
+                    });
+                }
+
+                items.push({
+                    id: `item-${Date.now()}-${idx}`,
+                    name: itemName,
+                    description: itemDesc,
+                    points: itemPoints,
+                    weight: itemWeight,
+                    ratings: ratings.length > 0 ? ratings : undefined
+                });
+            });
+
+            if (items.length === 0) {
+                this.showToast('Please add at least one criteria item', 'warning');
+                return;
+            }
+
+            const totalPoints = items.reduce((sum, item) => sum + item.points, 0);
+
+            const template = {
+                id: this.currentEditingCriteriaId || `criteria-${Date.now()}`,
+                name,
+                description,
+                totalPoints,
+                items,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+
+            // Save to store
+            let templates = await window.electronAPI.store.get('criteria.templates') || [];
+
+            if (this.currentEditingCriteriaId) {
+                // Update existing
+                const index = templates.findIndex(t => t.id === this.currentEditingCriteriaId);
+                if (index >= 0) {
+                    templates[index] = template;
+                } else {
+                    templates.push(template);
+                }
+            } else {
+                // Add new
+                templates.push(template);
+            }
+
+            await window.electronAPI.store.set('criteria.templates', templates);
+
+            this.showToast(`Criteria "${name}" saved successfully!`, 'success');
+            this.closeCriteriaModal();
+            this.loadSavedCriteria();
+
+        } catch (error) {
+            this.showToast(`Error saving criteria: ${error.message}`, 'error');
+        }
+    }
 }
 
 // Global functions for HTML onclick handlers
@@ -3481,9 +4043,9 @@ window.updateFTUEAIFields = () => {
     }
 };
 window.testCanvasConnection = () => window.app.testCanvasConnection();
-window.createNewCriteria = () => window.app.showToast('Criteria builder coming soon!', 'info');
+window.createNewCriteria = () => window.app.showCriteriaModal();
 window.loadDefaultCriteria = () => window.app.loadDefaultCriteria();
-window.editCriteria = (index) => window.app.editCriteria(index);
+window.editCriteria = (criteriaId) => window.app.showCriteriaModal(criteriaId);
 window.deleteCriteria = (index) => window.app.deleteCriteria(index);
 window.loadAssignments = () => window.app.loadAssignments();
 window.gradeAssignment = (courseId, assignmentId) => window.app.gradeAssignment(courseId, assignmentId);
