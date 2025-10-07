@@ -344,9 +344,11 @@ class APIKeyManager {
     }
 
     async getActiveProvider() {
-        const allKeys = await this.getAllAPIKeys();
-        for (const [provider, config] of Object.entries(allKeys)) {
-            if (config.isActive && config.apiKey) {
+        // Get all providers directly from store without masking
+        const allProviders = this.store.get('providers', {});
+
+        for (const [provider, config] of Object.entries(allProviders)) {
+            if (this.supportedProviders[provider] && config.isActive && config.apiKey) {
                 // Ensure providerInfo is always present
                 return {
                     provider,
