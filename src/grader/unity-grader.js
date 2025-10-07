@@ -94,7 +94,24 @@ class UnityGrader {
 
       // Perform the actual analysis (use the correct projectPath which may be a subdirectory)
       const projectStructure = await this.analyzeProjectStructure(projectPath);
-      const csharpFiles = await this.findCSharpFiles(projectPath);
+      let csharpFiles = await this.findCSharpFiles(projectPath);
+
+      // Fallback: If no C# files found in standard Unity structure, search entire repo
+      if (csharpFiles.length === 0) {
+        console.log('⚠️  No C# files found in Unity project structure, searching entire repository...');
+        const repoRootPath = cloneResult.path;
+        const allCSharpFiles = await this.gitCommands.findCSharpFiles(repoRootPath);
+
+        if (allCSharpFiles.length > 0) {
+          console.log(`✅ Found ${allCSharpFiles.length} C# files in repository root`);
+          csharpFiles = allCSharpFiles;
+        } else {
+          console.log('❌ No C# files found anywhere in repository');
+        }
+      } else {
+        console.log(`✅ Found ${csharpFiles.length} C# files in Unity project`);
+      }
+
       const codeAnalysis = await this.analyzeCSharpCode(csharpFiles);
       const unitySpecific = await this.analyzeUnitySpecifics(projectPath);
       const gitInfo = await this.gitCommands.getRepositoryInfo(projectPath);
