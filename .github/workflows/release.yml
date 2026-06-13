@@ -22,6 +22,18 @@ jobs:
         with:
           node-version: '18'
 
+      # electron-builder names its output from package.json "version", NOT the
+      # git tag. Without this step, pushing a tag whose commit didn't bump
+      # package.json ships a stale binary (e.g. a v1.2.0 tag producing 1.0.5
+      # assets). Derive the version from the tag so the build always matches.
+      - name: Sync version to tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Building version $VERSION (from tag $GITHUB_REF_NAME)"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+
       - name: Install dependencies
         run: npm install
 
@@ -39,6 +51,9 @@ jobs:
   create-release:
     needs: release
     runs-on: ubuntu-latest
+    # Only publish a GitHub Release for tag pushes — a manual workflow_dispatch
+    # on a branch has no tag and would fail (and historically did).
+    if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
       - name: Checkout code
@@ -50,10 +65,12 @@ jobs:
           path: artifacts
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**/*
-          body_path: CHANGELOG.md
-          generate_release_notes: false
+          # Auto-generate notes from commits/PRs since the last tag. The old
+          # body_path: CHANGELOG.md pinned every release to the static
+          # "[Unreleased]" block, so the notes never reflected the new version.
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
