@@ -289,7 +289,7 @@ class UnityAutoGraderApp {
                 result.courses.forEach(course => {
                     const option = document.createElement('option');
                     option.value = course.id;
-                    option.textContent = course.name;
+                    option.textContent = this.formatCourseLabel(course);
                     select.appendChild(option);
                 });
 
@@ -646,6 +646,19 @@ class UnityAutoGraderApp {
         }
     }
 
+    // Build a course dropdown label that includes the enrollment term, so
+    // courses reused across terms are distinguishable. Canvas returns the term
+    // under `term` (requires include[]=term) or sometimes `enrollment_term_id`.
+    formatCourseLabel(course) {
+        const termName = course.term && course.term.name ? course.term.name : null;
+        // Canvas uses "Default Term" / "The End of Time" for the catch-all term;
+        // showing it adds noise, so only append a real, named term.
+        if (termName && !/^default term$/i.test(termName)) {
+            return `${course.name} (${termName})`;
+        }
+        return course.name;
+    }
+
     async loadCoursesForAssignments() {
         if (!this.canvasConnected) {
             document.getElementById('assignments-list').innerHTML =
@@ -662,7 +675,7 @@ class UnityAutoGraderApp {
                 result.courses.forEach(course => {
                     const option = document.createElement('option');
                     option.value = course.id;
-                    option.textContent = course.name;
+                    option.textContent = this.formatCourseLabel(course);
                     courseSelect.appendChild(option);
                 });
             } else {

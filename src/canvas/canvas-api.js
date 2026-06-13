@@ -43,6 +43,7 @@ class CanvasAPI {
           enrollment_type: 'teacher',
           enrollment_state: 'active',
           state: ['available', 'completed'],
+          include: ['term'],
           per_page: 100
         }
       });
@@ -233,6 +234,29 @@ class CanvasAPI {
         .replace(/[?#].*$/, '') // Remove query string and fragment
         .replace(/\/+$/, '') // Remove trailing slashes
         .replace(/\.git$/, ''); // Remove .git suffix
+    }
+  }
+
+  async postComment(courseId, assignmentId, userId, comment) {
+    try {
+      const commentData = {
+        comment: {
+          text_comment: comment
+        }
+      };
+
+      await axios.put(
+        `${this.baseUrl}/courses/${courseId}/assignments/${assignmentId}/submissions/${userId}`,
+        commentData,
+        { headers: this.headers }
+      );
+
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: this.handleError(error)
+      };
     }
   }
 
