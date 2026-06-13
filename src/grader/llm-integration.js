@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const ClaudeCLIIntegration = require('./claude-cli-integration');
 
 class LLMIntegration {
   constructor(apiKeyManager) {
@@ -7,6 +8,16 @@ class LLMIntegration {
     this.isAvailable = false;
     this.activeProvider = null;
     this.activeAnalyses = new Map();
+    this.claudeCLI = new ClaudeCLIIntegration();
+    // Grading backend: 'api' uses a stored provider key, 'cli' shells out to
+    // the local Claude CLI. Chosen in initialize() based on preferCLI + what's
+    // actually available.
+    this.mode = 'api';
+    this.preferCLI = false; // set from the "use Claude CLI" toggle
+  }
+
+  setPreferCLI(value) {
+    this.preferCLI = !!value;
   }
 
   async initialize() {
@@ -16,26 +27,39 @@ class LLMIntegration {
       console.log('========================================');
 
       const activeProvider = await this.apiKeyManager.getActiveProvider();
+      const cliAvailable = await this.claudeCLI.isAvailable();
 
       console.log('📦 Active Provider Result:', activeProvider ? 'Found' : 'NULL');
+      console.log('📦 Claude CLI Available:', cliAvailable);
 
-      if (activeProvider) {
+      // Decision: explicit CLI preference wins when the CLI is present;
+      // otherwise use a configured API provider; otherwise fall back to the
+      // CLI if it happens to be installed.
+      if (this.preferCLI && cliAvailable) {
+        this.mode = 'cli';
+        this.activeProvider = null;
+        this.isAvailable = true;
+        console.log('✅ LLM integration ready (Claude CLI, user-selected)');
+        console.log('========================================\n');
+      } else if (activeProvider) {
+        this.mode = 'api';
         this.activeProvider = activeProvider;
         this.isAvailable = true;
-
         console.log('✅ LLM integration initialized successfully');
         console.log(`   Provider: ${activeProvider.provider}`);
         console.log(`   Provider Name: ${activeProvider.config.providerInfo?.name || 'Unknown'}`);
-        console.log(`   API Key Present: ${!!activeProvider.config.apiKey}`);
-        console.log(`   API Key Length: ${activeProvider.config.apiKey ? activeProvider.config.apiKey.length : 0}`);
-        console.log(`   API Key Preview: ${activeProvider.config.apiKey ? '***' + activeProvider.config.apiKey.slice(-4) : 'N/A'}`);
-        console.log(`   API Key First 10 chars: ${activeProvider.config.apiKey ? activeProvider.config.apiKey.substring(0, 10) + '...' : 'N/A'}`);
+        console.log(`   Model: ${activeProvider.config.model || activeProvider.config.providerInfo?.defaultModel || 'default'}`);
+        console.log(`   API Key Configured: ${!!activeProvider.config.apiKey}`);
         console.log(`   Is Active: ${activeProvider.config.isActive}`);
-        console.log(`   Created At: ${activeProvider.config.createdAt || 'Unknown'}`);
-        console.log(`   Last Used: ${activeProvider.config.lastUsed || 'Never'}`);
+        console.log('========================================\n');
+      } else if (cliAvailable) {
+        this.mode = 'cli';
+        this.activeProvider = null;
+        this.isAvailable = true;
+        console.log('✅ LLM integration ready (Claude CLI fallback — no API key configured)');
         console.log('========================================\n');
       } else {
-        console.log('⚠️ No active LLM provider found. Please configure an API key in Settings.');
+        console.log('⚠️ No LLM backend available. Configure an API key in Settings, or install the Claude CLI.');
         console.log('========================================\n');
         this.isAvailable = false;
       }
@@ -103,7 +127,7 @@ class LLMIntegration {
         projectAnalysis,
         criteria: gradingCriteria,
         assignmentDetails,
-        provider: this.activeProvider.provider
+        provider: this.mode === 'cli' ? 'claude-cli' : this.activeProvider.provider
       });
 
       const result = await this.executeLLMAnalysis(prompt, projectAnalysis);
@@ -113,11 +137,13 @@ class LLMIntegration {
         startTime: this.activeAnalyses.get(analysisId).startTime,
         endTime: Date.now(),
         result,
-        provider: this.activeProvider.provider
+        provider: this.mode === 'cli' ? 'claude-cli' : this.activeProvider.provider
       });
 
-      // Update last used timestamp for the provider
-      await this.apiKeyManager.updateLastUsed(this.activeProvider.provider);
+      // Update last used timestamp for the provider (API mode only)
+      if (this.mode === 'api' && this.activeProvider) {
+        await this.apiKeyManager.updateLastUsed(this.activeProvider.provider);
+      }
 
       return {
         analysisId,
@@ -146,7 +172,12 @@ You are an expert Unity instructor grading a student's math programming assignme
 ## Assignment Details
 ${assignmentDetails ? this.formatAssignmentDetails(assignmentDetails) : 'Standard Unity Math Programming Assignment'}
 
-## Grading Rubric and Criteria
+${criteria.customInstructions ? `## Custom Grading Instructions
+${criteria.customInstructions}
+
+**Important:** Please pay special attention to the above custom instructions when evaluating this submission.
+
+` : ''}## Grading Rubric and Criteria
 ${this.formatGradingCriteria(criteria)}
 
 ## Project Analysis Data
@@ -161,7 +192,10 @@ ${this.formatGradingCriteria(criteria)}
 - **Assets Folder Present:** ${projectAnalysis.structure?.hasAssetsFolder ? 'Yes' : 'No'}
 - **Scripts Folder Organized:** ${projectAnalysis.structure?.hasScriptsFolder ? 'Yes' : 'No'}
 - **MonoBehaviour Classes:** ${projectAnalysis.codeAnalysis?.patterns?.monoBehaviours || 0}
-
+${projectAnalysis.structure?.isNonStandard ? `
+- **⚠️ Non-Standard Structure Detected:** ${projectAnalysis.structure?.nonStandardReason}
+- **Note:** This submission does not follow standard Unity project structure but contains valid C# code files. Evaluate the code quality and implementation regardless of folder structure.
+` : ''}
 ### Mathematical Concepts Implementation
 
 #### Vector Mathematics
@@ -269,6 +303,7 @@ ${this.buildExampleCriteriaScores(criteria)}
 - Provide specific examples from the code when possible
 - Connect mathematical concepts to real-world game development applications
 - Suggest next steps for continued learning
+- **Project Structure Flexibility:** Some students may submit only C# files without the full Unity folder structure. This is acceptable - focus on code quality and implementation rather than folder organization.
 - Remember that this is an educational assessment aimed at helping the student improve
 
 Please analyze this Unity project thoroughly and provide detailed, educational feedback that will help this student grow as a game developer and mathematician.
@@ -412,12 +447,51 @@ ${assignmentDetails.description || 'Standard Unity math programming assignment f
   }
 
   async executeLLMAnalysis(prompt, projectAnalysis) {
+    const fullPrompt = this.buildAnalysisPrompt(prompt, projectAnalysis);
+
+    if (this.mode === 'cli') {
+      return await this.callClaudeCLI(fullPrompt);
+    }
+
     if (!this.activeProvider) {
       throw new Error('No active LLM provider available');
     }
 
-    const fullPrompt = this.buildAnalysisPrompt(prompt, projectAnalysis);
     return await this.callLLMAPI(fullPrompt);
+  }
+
+  async callClaudeCLI(prompt) {
+    console.log('\n========================================');
+    console.log('🚀 CALLING CLAUDE CLI');
+    console.log('========================================');
+    try {
+      const content = await this.claudeCLI.analyze(prompt);
+      console.log(`✅ Claude CLI returned ${content.length} characters`);
+      console.log('========================================\n');
+      try {
+        return this.parseResponse(content);
+      } catch (parseError) {
+        console.warn('Failed to parse CLI output as JSON, returning raw response');
+        return {
+          overallGrade: 75,
+          maxPoints: 100,
+          criteriaScores: {},
+          overallFeedback: {
+            strengths: ['Code analysis completed'],
+            improvements: ['Review suggestions in raw output'],
+            detailedFeedback: content.substring(0, 1000)
+          },
+          rawOutput: content
+        };
+      }
+    } catch (error) {
+      console.error('❌ Claude CLI call failed:', error.message);
+      console.log('========================================\n');
+      const enhancedError = new Error(error.message);
+      enhancedError.provider = 'claude-cli';
+      enhancedError.originalError = error;
+      throw enhancedError;
+    }
   }
 
   buildAnalysisPrompt(originalPrompt, projectAnalysis) {
@@ -457,22 +531,11 @@ Please provide a detailed analysis and grading based on this information.`;
     const provider = this.activeProvider.provider;
     const config = this.activeProvider.config;
     const apiKey = config.apiKey;
+    const model = config.model || config.providerInfo?.defaultModel;
 
     console.log(`🤖 Provider: ${config.providerInfo?.name || provider}`);
-    console.log(`   Provider Type: ${provider}`);
-    console.log(`   API Key Present: ${!!apiKey}`);
-    console.log(`   API Key Length: ${apiKey ? apiKey.length : 0} characters`);
-    console.log(`   API Key First 10: ${apiKey ? apiKey.substring(0, 10) : 'N/A'}...`);
-    console.log(`   API Key Last 4: ***${apiKey ? apiKey.slice(-4) : 'N/A'}`);
-    console.log(`   API Key Format Check:`);
-    console.log(`     - Starts with 'sk-': ${apiKey ? apiKey.startsWith('sk-') : false}`);
-    console.log(`     - Starts with 'sk-ant-': ${apiKey ? apiKey.startsWith('sk-ant-') : false}`);
-    console.log(`     - Contains spaces: ${apiKey ? apiKey.includes(' ') : false}`);
-    console.log(`     - Contains newlines: ${apiKey ? apiKey.includes('\n') : false}`);
-    console.log(`     - Trimmed length: ${apiKey ? apiKey.trim().length : 0}`);
-    console.log(`   Key Source: ${config.lastUsed ? 'Stored in app' : 'From .env file'}`);
-    console.log(`   Created At: ${config.createdAt || 'Unknown'}`);
-    console.log(`   Last Used: ${config.lastUsed || 'Never'}`);
+    console.log(`   Model: ${model || 'default'}`);
+    console.log(`   API Key Configured: ${!!apiKey}`);
     console.log('========================================');
 
     // Validate API key is not empty or whitespace
@@ -482,26 +545,13 @@ Please provide a detailed analysis and grading based on this information.`;
       throw new Error('API key is empty or invalid');
     }
 
-    // Additional validation
-    if (provider === 'anthropic' && !apiKey.startsWith('sk-ant-')) {
-      console.warn('⚠️ Warning: Anthropic API key should start with "sk-ant-"');
-      console.log(`   Current key starts with: ${apiKey.substring(0, 10)}...`);
-    }
-
     try {
       console.log('📡 Making API request...');
       let response, data, content;
 
       switch (provider) {
         case 'anthropic':
-          console.log('📤 Sending request to Anthropic API...');
-          console.log(`   URL: https://api.anthropic.com/v1/messages`);
-          console.log(`   Headers:`);
-          console.log(`     Content-Type: application/json`);
-          console.log(`     x-api-key: ${config.apiKey.substring(0, 10)}...${config.apiKey.slice(-4)}`);
-          console.log(`     anthropic-version: 2023-06-01`);
-          console.log(`   Model: claude-3-5-sonnet-20241022`);
-          console.log(`   Max Tokens: 4000`);
+          console.log(`📤 Sending request to Anthropic API (model: ${model})...`);
 
           response = await fetch('https://api.anthropic.com/v1/messages', {
             method: 'POST',
@@ -511,8 +561,8 @@ Please provide a detailed analysis and grading based on this information.`;
               'anthropic-version': '2023-06-01'
             },
             body: JSON.stringify({
-              model: 'claude-3-5-sonnet-20241022',
-              max_tokens: 4000,
+              model: model,
+              max_tokens: 8000,
               messages: [{ role: 'user', content: prompt }]
             })
           });
@@ -562,7 +612,7 @@ Please provide a detailed analysis and grading based on this information.`;
               'Authorization': `Bearer ${config.apiKey}`
             },
             body: JSON.stringify({
-              model: 'gpt-4o',
+              model: model,
               max_tokens: 4000,
               messages: [{ role: 'user', content: prompt }]
             })
@@ -576,7 +626,7 @@ Please provide a detailed analysis and grading based on this information.`;
           break;
 
         case 'google':
-          response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${config.apiKey}`, {
+          response = await fetch(`https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${config.apiKey}`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
@@ -606,7 +656,7 @@ Please provide a detailed analysis and grading based on this information.`;
               'Authorization': `Bearer ${config.apiKey}`
             },
             body: JSON.stringify({
-              model: 'command-r-plus',
+              model: model,
               message: prompt,
               max_tokens: 4000
             })
@@ -827,8 +877,9 @@ Please provide a detailed analysis and grading based on this information.`;
   getAvailabilityStatus() {
     return {
       isAvailable: this.isAvailable,
-      activeProvider: this.activeProvider?.provider || null,
-      providerName: this.activeProvider?.config.providerInfo.name || null,
+      mode: this.mode,
+      activeProvider: this.mode === 'cli' ? 'claude-cli' : (this.activeProvider?.provider || null),
+      providerName: this.mode === 'cli' ? 'Claude CLI' : (this.activeProvider?.config.providerInfo.name || null),
       activeAnalyses: this.activeAnalyses.size
     };
   }

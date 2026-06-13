@@ -1,63 +1,110 @@
-const crypto = require('crypto');
-const { app } = require('electron');
+const { safeStorage } = require('electron');
 const Store = require('electron-store');
+
+// Marker prefix identifying a value encrypted with Electron's safeStorage
+// (OS-backed: DPAPI on Windows, Keychain on macOS, libsecret on Linux).
+const ENC_PREFIX = 'enc:v1:';
 
 class APIKeyManager {
     constructor() {
-        this.store = new Store({
-            name: 'api-keys',
-            encryptionKey: this.getEncryptionKey()
-        });
+        // Plaintext-on-disk store. Secrets are encrypted per-value with the OS
+        // keystore (see encryptSecret/decryptSecret) rather than relying on a
+        // hardcoded electron-store key, which offered no real protection.
+        try {
+            this.store = new Store({ name: 'api-keys' });
+            // Touch the store to surface a corrupt file early.
+            try {
+                this.store.get('providers', {});
+            } catch (readError) {
+                console.error('Failed to read key store, recreating:', readError.message);
+                this.store.clear();
+            }
+        } catch (error) {
+            console.error('Failed to initialize key store:', error.message);
+            this.store = new Store({ name: 'api-keys' });
+        }
 
         this.supportedProviders = {
             openai: {
                 name: 'OpenAI',
                 baseUrl: 'https://api.openai.com/v1',
                 fields: ['apiKey'],
-                models: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo', 'gpt-4o', 'gpt-4o-mini']
+                models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
+                defaultModel: 'gpt-4o'
             },
             anthropic: {
                 name: 'Anthropic (Claude)',
                 baseUrl: 'https://api.anthropic.com/v1',
                 fields: ['apiKey'],
-                models: ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307', 'claude-3-5-sonnet-20241022']
+                models: ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
+                defaultModel: 'claude-opus-4-8'
             },
             google: {
                 name: 'Google AI (Gemini)',
                 baseUrl: 'https://generativelanguage.googleapis.com/v1',
                 fields: ['apiKey'],
-                models: ['gemini-pro', 'gemini-pro-vision', 'gemini-1.5-pro', 'gemini-1.5-flash']
+                models: ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+                defaultModel: 'gemini-2.0-flash'
             },
             cohere: {
                 name: 'Cohere',
                 baseUrl: 'https://api.cohere.ai/v1',
                 fields: ['apiKey'],
-                models: ['command', 'command-r', 'command-r-plus', 'command-light']
+                models: ['command-r-plus', 'command-r', 'command'],
+                defaultModel: 'command-r-plus'
             },
             huggingface: {
                 name: 'Hugging Face',
                 baseUrl: 'https://api-inference.huggingface.co/models',
                 fields: ['apiKey'],
-                models: ['custom-endpoint']
+                models: ['custom-endpoint'],
+                defaultModel: 'custom-endpoint'
             },
             azure: {
                 name: 'Azure OpenAI',
                 baseUrl: 'https://your-resource.openai.azure.com',
                 fields: ['apiKey', 'endpoint', 'deploymentName'],
-                models: ['gpt-4', 'gpt-35-turbo']
+                models: ['gpt-4o', 'gpt-4', 'gpt-35-turbo'],
+                defaultModel: 'gpt-4o'
             },
             custom: {
                 name: 'Custom LLM API',
                 baseUrl: 'https://your-api-endpoint.com',
                 fields: ['apiKey', 'endpoint'],
-                models: ['custom-model']
+                models: ['custom-model'],
+                defaultModel: 'custom-model'
             }
         };
     }
 
-    getEncryptionKey() {
-        const machineId = app.getPath('userData');
-        return crypto.createHash('sha256').update(machineId + 'aralaro-keys').digest('hex').substr(0, 32);
+    // Encrypt a secret with the OS keystore. Falls back to plaintext only when
+    // the platform can't provide encryption (rare; logged once by the caller).
+    encryptSecret(plain) {
+        if (typeof plain !== 'string' || plain === '') {
+            return plain;
+        }
+        try {
+            if (safeStorage.isEncryptionAvailable()) {
+                return ENC_PREFIX + safeStorage.encryptString(plain).toString('base64');
+            }
+        } catch (error) {
+            console.warn('safeStorage encryption unavailable, storing key unencrypted:', error.message);
+        }
+        return plain;
+    }
+
+    // Reverse of encryptSecret. Plaintext (legacy or fallback) values pass through.
+    decryptSecret(stored) {
+        if (typeof stored !== 'string' || !stored.startsWith(ENC_PREFIX)) {
+            return stored;
+        }
+        try {
+            const buf = Buffer.from(stored.slice(ENC_PREFIX.length), 'base64');
+            return safeStorage.decryptString(buf);
+        } catch (error) {
+            console.error('Failed to decrypt stored key:', error.message);
+            return null;
+        }
     }
 
     async setAPIKey(provider, config) {
@@ -80,9 +127,12 @@ class APIKeyManager {
             }
         }
 
+        const providerInfo = this.supportedProviders[provider];
         const keyData = {
             ...cleanedConfig,
             provider,
+            model: cleanedConfig.model || providerInfo.defaultModel,
+            apiKey: this.encryptSecret(cleanedConfig.apiKey),
             createdAt: new Date().toISOString(),
             lastUsed: null,
             isActive: cleanedConfig.isActive !== undefined ? cleanedConfig.isActive : true
@@ -102,7 +152,8 @@ class APIKeyManager {
             return null;
         }
 
-        return keyData;
+        // Decrypt the secret for in-process use; on-disk value stays encrypted.
+        return { ...keyData, apiKey: this.decryptSecret(keyData.apiKey) };
     }
 
     async getAllAPIKeys() {
@@ -111,10 +162,12 @@ class APIKeyManager {
 
         for (const [provider, data] of Object.entries(allProviders)) {
             if (this.supportedProviders[provider]) {
+                const plain = this.decryptSecret(data.apiKey);
                 result[provider] = {
                     ...data,
+                    model: data.model || this.supportedProviders[provider].defaultModel,
                     providerInfo: this.supportedProviders[provider],
-                    apiKey: data.apiKey ? '***' + data.apiKey.slice(-4) : null
+                    apiKey: plain ? '***' + plain.slice(-4) : null
                 };
             }
         }
@@ -201,7 +254,7 @@ class APIKeyManager {
             return {
                 success: true,
                 message: 'Anthropic API key is valid',
-                models: ['claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku']
+                models: this.supportedProviders.anthropic.models
             };
         } else {
             const error = await response.text();
@@ -343,46 +396,140 @@ class APIKeyManager {
         return this.supportedProviders;
     }
 
-    async getActiveProvider() {
-        // Get all providers directly from store without masking
+    validateKeyFormat(provider, apiKey) {
+        if (!apiKey || typeof apiKey !== 'string') {
+            return false;
+        }
+
+        // Check for common API key formats
+        switch (provider) {
+            case 'anthropic':
+                // Anthropic keys start with sk-ant-api03- or similar
+                return apiKey.startsWith('sk-ant-');
+            case 'openai':
+                // OpenAI keys start with sk-
+                return apiKey.startsWith('sk-');
+            case 'google':
+                // Google AI keys are typically 39 characters
+                return apiKey.length >= 20;
+            case 'azure':
+                // Azure keys are typically 32 characters hex
+                return apiKey.length >= 20;
+            default:
+                // For other providers, just check it's not empty
+                return apiKey.length > 10;
+        }
+    }
+
+    getExpectedKeyFormat(provider) {
+        switch (provider) {
+            case 'anthropic':
+                return 'sk-ant-api03-...';
+            case 'openai':
+                return 'sk-...';
+            case 'google':
+                return 'AI... (39 chars)';
+            case 'azure':
+                return '32 character hex string';
+            default:
+                return 'Valid API key';
+        }
+    }
+
+    async validateAndCleanupKeys() {
+        console.log('\n🔍 Validating stored API keys...');
         const allProviders = this.store.get('providers', {});
+        let cleanedCount = 0;
 
         for (const [provider, config] of Object.entries(allProviders)) {
-            if (this.supportedProviders[provider] && config.isActive && config.apiKey) {
-                // Ensure providerInfo is always present
-                return {
-                    provider,
-                    config: {
-                        ...config,
-                        providerInfo: this.supportedProviders[provider]
-                    }
-                };
+            const apiKey = this.decryptSecret(config.apiKey);
+            if (config.apiKey && (!apiKey || !this.validateKeyFormat(provider, apiKey))) {
+                console.warn(`⚠️ Removing invalid API key for ${provider}`);
+                this.store.delete(`providers.${provider}`);
+                cleanedCount++;
             }
         }
 
-        // Fallback to environment variables if no stored keys are active
-        if (process.env.ANTHROPIC_API_KEY) {
-            return {
-                provider: 'anthropic',
-                config: {
-                    apiKey: process.env.ANTHROPIC_API_KEY,
-                    provider: 'anthropic',
-                    isActive: true,
-                    providerInfo: this.supportedProviders.anthropic
+        if (cleanedCount > 0) {
+            console.log(`✅ Cleaned up ${cleanedCount} invalid API key(s)`);
+        } else {
+            console.log('✅ All stored API keys are valid');
+        }
+    }
+
+    async getActiveProvider() {
+        try {
+            // Get all providers directly from store without masking
+            const allProviders = this.store.get('providers', {});
+
+            for (const [provider, config] of Object.entries(allProviders)) {
+                if (this.supportedProviders[provider] && config.isActive && config.apiKey) {
+                    // Decrypt before validating — the on-disk value is ciphertext.
+                    const apiKey = this.decryptSecret(config.apiKey);
+                    const isValidKey = apiKey && this.validateKeyFormat(provider, apiKey);
+
+                    if (!isValidKey) {
+                        console.warn(`Invalid API key format detected for ${provider}, skipping...`);
+                        console.warn(`   Expected format: ${this.getExpectedKeyFormat(provider)}`);
+                        // Mark as inactive to prevent future issues (without rewriting the secret)
+                        try {
+                            this.store.set(`providers.${provider}.isActive`, false);
+                        } catch (e) {
+                            console.error(`Failed to update provider status: ${e.message}`);
+                        }
+                        continue;
+                    }
+
+                    // Ensure providerInfo is always present
+                    return {
+                        provider,
+                        config: {
+                            ...config,
+                            apiKey,
+                            model: config.model || this.supportedProviders[provider].defaultModel,
+                            providerInfo: this.supportedProviders[provider]
+                        }
+                    };
                 }
-            };
+            }
+        } catch (error) {
+            console.error('Error reading stored API keys:', error.message);
+            // In production, we don't fall back to .env - the user must configure keys in the app
+            if (process.env.NODE_ENV === 'development') {
+                console.log('Development mode: Falling back to environment variables...');
+            } else {
+                console.error('No valid stored API keys found. Please configure your API key in Settings.');
+                return null;
+            }
         }
 
-        if (process.env.OPENAI_API_KEY) {
-            return {
-                provider: 'openai',
-                config: {
-                    apiKey: process.env.OPENAI_API_KEY,
+        // Only use .env fallback in development mode
+        if (process.env.NODE_ENV === 'development') {
+            if (process.env.ANTHROPIC_API_KEY) {
+                console.log('Using Anthropic API key from environment variables (dev mode only)');
+                return {
+                    provider: 'anthropic',
+                    config: {
+                        apiKey: process.env.ANTHROPIC_API_KEY.trim(),
+                        provider: 'anthropic',
+                        isActive: true,
+                        providerInfo: this.supportedProviders.anthropic
+                    }
+                };
+            }
+
+            if (process.env.OPENAI_API_KEY) {
+                console.log('Using OpenAI API key from environment variables (dev mode only)');
+                return {
                     provider: 'openai',
-                    isActive: true,
-                    providerInfo: this.supportedProviders.openai
-                }
-            };
+                    config: {
+                        apiKey: process.env.OPENAI_API_KEY.trim(),
+                        provider: 'openai',
+                        isActive: true,
+                        providerInfo: this.supportedProviders.openai
+                    }
+                };
+            }
         }
 
         return null;
@@ -412,6 +559,42 @@ class APIKeyManager {
     async clearAllKeys() {
         this.store.delete('providers');
         return { success: true, message: 'All API keys have been deleted' };
+    }
+
+    async resetStore() {
+        // Complete reset of the store, useful if encryption becomes corrupted
+        try {
+            this.store.clear();
+            console.log('Store has been completely reset');
+            return { success: true, message: 'Store has been reset successfully' };
+        } catch (error) {
+            console.error('Failed to reset store:', error.message);
+            return { success: false, message: `Failed to reset store: ${error.message}` };
+        }
+    }
+
+    async healthCheck() {
+        // Perform a health check on the store
+        try {
+            const providers = this.store.get('providers', {});
+            const providerCount = Object.keys(providers).length;
+
+            return {
+                success: true,
+                healthy: true,
+                providerCount,
+                message: `Store is healthy with ${providerCount} provider(s) configured`
+            };
+        } catch (error) {
+            console.error('Store health check failed:', error.message);
+            return {
+                success: false,
+                healthy: false,
+                error: error.message,
+                message: 'Store is corrupted or unreadable. Consider resetting the store.',
+                suggestedAction: 'reset'
+            };
+        }
     }
 }
 

@@ -1089,6 +1089,11 @@
                                     </div>
                                 </div>
 
+                                <div class="form-group" id="model-field" style="display: none;">
+                                    <label class="form-label" for="api-model">Model</label>
+                                    <select class="form-input" id="api-model"></select>
+                                </div>
+
                                 <div class="form-group">
                                     <label class="form-label">
                                         <input type="checkbox" id="api-is-active" checked style="margin-right: 8px;">
@@ -1108,6 +1113,17 @@
                         <div id="api-keys-list">
                             <p>Loading API keys...</p>
                         </div>
+                    </div>
+
+                    <!-- Claude CLI -->
+                    <div class="card">
+                        <h3>⌨️ Claude CLI</h3>
+                        <p>Use the locally installed Claude CLI for grading instead of an API key. When enabled, grading is sent through the <code>claude</code> command on this machine.</p>
+                        <div id="claude-cli-status" style="margin-bottom: 12px;">Checking for Claude CLI...</div>
+                        <label class="form-label" style="display: flex; align-items: center;">
+                            <input type="checkbox" id="claude-cli-toggle" onchange="app.toggleClaudeCLI()" style="margin-right: 8px;" disabled>
+                            Use Claude CLI for grading
+                        </label>
                     </div>
 
                     <!-- Late Penalty Settings -->
@@ -1233,6 +1249,15 @@
                         <label class="form-label" for="criteria-description">Description</label>
                         <input type="text" class="form-input" id="criteria-description"
                                placeholder="Brief description of this rubric">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="custom-ai-instructions">Custom AI Instructions (Optional)</label>
+                        <textarea class="form-input" id="custom-ai-instructions" rows="3"
+                                  placeholder="Add specific instructions for the AI grader to consider (e.g., 'Focus on vector calculations', 'Check for proper physics implementation')"></textarea>
+                        <small style="color: rgba(255,255,255,0.6); font-size: 12px; display: block; margin-top: 4px;">
+                            These instructions will be provided to the AI when grading submissions with this rubric.
+                        </small>
                     </div>
 
                     <div class="form-group">

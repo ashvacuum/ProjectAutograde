@@ -1122,12 +1122,36 @@ class UnityAutoGraderApp {
                 console.log('Student:', submission.user?.name || 'Unknown');
                 console.log('User ID:', submission.user_id);
 
-                // Update progress
+                // Calculate stats from completed results
+                const completedResults = this.gradingResults.filter(r => r.grade);
+                const totalScore = completedResults.reduce((sum, r) => {
+                    const score = r.grade.overallGrade !== undefined ? r.grade.overallGrade :
+                                  r.grade.result?.overallGrade !== undefined ? r.grade.result.overallGrade : 0;
+                    return sum + score;
+                }, 0);
+                const averageScore = completedResults.length > 0 ? totalScore / completedResults.length : 0;
+                const errorCount = this.gradingResults.filter(r => r.error).length;
+                const needsReviewCount = this.gradingResults.filter(r => r.needsInstructorIntervention).length;
+
+                // Update progress with stats
                 const progressFill = document.getElementById('batch-progress-fill');
                 const progressText = document.getElementById('batch-progress-text');
 
                 if (progressFill) progressFill.style.width = `${progress}%`;
-                if (progressText) progressText.textContent = `Grading ${submission.user?.name || 'Unknown'} (${i + 1}/${submissionsToGrade.length})`;
+                if (progressText) {
+                    progressText.innerHTML = `
+                        <div>
+                            <p><strong>Grading ${submission.user?.name || 'Unknown'} (${i + 1}/${submissionsToGrade.length})</strong></p>
+                            ${i > 0 ? `
+                                <p style="margin-top: 10px; font-size: 14px;">
+                                    Avg Score: ${averageScore.toFixed(1)}/50 |
+                                    Errors: <span style="color: ${errorCount > 0 ? '#e74c3c' : '#2ecc71'};">${errorCount}</span> |
+                                    Needs Review: <span style="color: ${needsReviewCount > 0 ? '#f39c12' : '#2ecc71'};">${needsReviewCount}</span>
+                                </p>
+                            ` : ''}
+                        </div>
+                    `;
+                }
 
                 // Extract GitHub URL
                 let githubUrl = '';
@@ -2011,9 +2035,29 @@ class UnityAutoGraderApp {
         }
 
         if (progressText) {
+            // Calculate stats
+            const completed = progress.current - 1; // Current is the one being processed
+            const stats = progress.stats || {
+                totalGraded: 0,
+                averageScore: 0,
+                errorCount: 0,
+                needsReviewCount: 0
+            };
+
             progressText.innerHTML = `
-                <p>Grading in progress: ${progress.current}/${progress.total} submissions</p>
-                <p>Current: ${progress.currentStudent || 'Processing...'}</p>
+                <div style="padding: 15px; background: rgba(52, 152, 219, 0.1); border-radius: 8px;">
+                    <h3 style="margin: 0 0 10px 0; color: #3498db;">Grading Progress</h3>
+                    <p style="margin: 5px 0;"><strong>Status:</strong> ${progress.current}/${progress.total} submissions</p>
+                    <p style="margin: 5px 0;"><strong>Current:</strong> ${progress.currentStudent || 'Processing...'}</p>
+                    ${completed > 0 ? `
+                        <hr style="margin: 10px 0; border: none; border-top: 1px solid rgba(52, 152, 219, 0.3);">
+                        <h4 style="margin: 10px 0 5px 0; color: #2c3e50;">Statistics</h4>
+                        <p style="margin: 5px 0;"><strong>Completed:</strong> ${completed}</p>
+                        <p style="margin: 5px 0;"><strong>Average Score:</strong> ${stats.averageScore ? stats.averageScore.toFixed(1) : 'N/A'}/50</p>
+                        <p style="margin: 5px 0;"><strong>Errors:</strong> <span style="color: ${stats.errorCount > 0 ? '#e74c3c' : '#2ecc71'};">${stats.errorCount}</span></p>
+                        <p style="margin: 5px 0;"><strong>Needs Review:</strong> <span style="color: ${stats.needsReviewCount > 0 ? '#f39c12' : '#2ecc71'};">${stats.needsReviewCount}</span></p>
+                    ` : ''}
+                </div>
             `;
         }
     }
@@ -2264,7 +2308,13 @@ class UnityAutoGraderApp {
                         <button class="btn btn-secondary" onclick="app.viewDetailedResult(${originalIndex})">View Details</button>
                         ${result.needsInstructorIntervention ?
                             `<button class="btn" onclick="app.openCanvasSubmission(${originalIndex})" style="margin-left: 8px;">Review in Canvas</button>` :
-                            `<button class="btn" onclick="app.postGradeToCanvas(${originalIndex})" style="margin-left: 8px;">Post to Canvas</button>`
+                            result.postedToCanvas && !result.regraded ?
+                            `<button class="btn" disabled style="margin-left: 8px; opacity: 0.5; cursor: not-allowed;" title="Already posted to Canvas">Posted to Canvas</button>` :
+                            `<button class="btn" onclick="app.postGradeToCanvas(${originalIndex})" style="margin-left: 8px;">${result.postedToCanvas ? 'Re-post' : 'Post'} to Canvas</button>`
+                        }
+                        ${(result.errorType === 'private_repo' || result.errorType === 'not_found') && !result.commentPosted ?
+                            `<button class="btn" onclick="app.postInaccessibleComment(${originalIndex})" style="margin-left: 8px; background: #f39c12;">Comment on Access Issue</button>` :
+                            ''
                         }
                         <button class="btn btn-secondary" onclick="app.regradeSubmission(${originalIndex})" style="margin-left: 8px;">Regrade</button>
                     </td>
@@ -2487,6 +2537,22 @@ class UnityAutoGraderApp {
                         </p>
                     ` : ''}
                     ${result.error ? `<p style="margin: 12px 0 0 0; font-size: 12px; opacity: 0.7;">Technical Error: ${result.error}</p>` : ''}
+                </div>
+            `;
+        }
+
+        // Non-Standard Structure Notice
+        const analysisData = result.result || result.analysis;
+        if (analysisData && analysisData.structure && analysisData.structure.isNonStandard) {
+            detailsHtml += `
+                <div style="background: rgba(241, 196, 15, 0.2); padding: 16px; border-radius: 8px; margin-bottom: 16px; border-left: 4px solid #f1c40f;">
+                    <strong style="font-size: 16px;">ℹ️ Non-Standard Project Structure</strong><br>
+                    <p style="margin: 12px 0 0 0; font-size: 14px;">
+                        ${analysisData.structure.nonStandardReason}
+                    </p>
+                    <p style="margin: 8px 0 0 0; font-size: 13px; opacity: 0.9;">
+                        This submission was evaluated based on the C# code files present. Folder structure was not a factor in grading.
+                    </p>
                 </div>
             `;
         }
@@ -2822,6 +2888,7 @@ class UnityAutoGraderApp {
                 console.log('✅ Grade posted successfully');
                 this.showToast(`Grade posted to Canvas for ${result.studentName}`, 'success');
                 result.postedToCanvas = true;
+                result.regraded = false; // Clear regraded flag after posting
                 this.loadGradingResults(); // Refresh display
             } else {
                 console.error('❌ Failed to post grade:', postResult.error);
@@ -2834,6 +2901,60 @@ class UnityAutoGraderApp {
             console.error('❌ Exception posting grade:', error);
             console.log('========================================\n');
             this.showToast(`Error posting grade to Canvas: ${error.message}`, 'error');
+        }
+    }
+
+    async postInaccessibleComment(index) {
+        const result = this.gradingResults[index];
+
+        if (!result) {
+            this.showToast('Cannot post comment - no result found', 'error');
+            return;
+        }
+
+        // Get course/assignment info
+        let courseId, assignmentId, userId;
+
+        if (result.courseId && result.assignmentId) {
+            courseId = result.courseId;
+            assignmentId = result.assignmentId;
+        } else if (this.currentAssignment) {
+            courseId = this.currentAssignment.courseId;
+            assignmentId = this.currentAssignment.assignmentId;
+        } else {
+            this.showToast('Cannot post comment - missing course/assignment info', 'error');
+            return;
+        }
+
+        userId = result.studentId || result.userId;
+
+        if (!userId) {
+            this.showToast('Cannot post comment - missing student/user ID', 'error');
+            return;
+        }
+
+        try {
+            const comment = result.errorType === 'private_repo'
+                ? '⚠️ Your GitHub repository appears to be private or inaccessible. Please make your repository public and verify the link is correct. If you need help, please reach out during office hours.'
+                : '⚠️ Your GitHub repository could not be accessed. Please verify the link is correct and the repository is public. If you continue to have issues, please reach out for assistance.';
+
+            const postResult = await window.electronAPI.canvas.postComment(
+                courseId,
+                assignmentId,
+                userId,
+                comment
+            );
+
+            if (postResult.success) {
+                this.showToast(`Comment posted to ${result.studentName}'s submission`, 'success');
+                result.commentPosted = true;
+                this.loadGradingResults(); // Refresh display
+            } else {
+                this.showToast(`Failed to post comment: ${postResult.error}`, 'error');
+            }
+
+        } catch (error) {
+            this.showToast(`Error posting comment: ${error.message}`, 'error');
         }
     }
 
@@ -2927,6 +3048,7 @@ class UnityAutoGraderApp {
                 result.errorType = regradeResult.errorType || null;
                 result.error = null; // Clear any previous errors
                 result.regradedAt = new Date().toISOString();
+                result.regraded = true; // Mark as regraded to allow re-posting to Canvas
 
                 console.log('✅ Result updated successfully');
                 this.showToast(`Regrade completed for ${result.studentName}!`, 'success');
@@ -3073,6 +3195,51 @@ class UnityAutoGraderApp {
         await this.loadSupportedProviders();
         await this.loadAPIKeys();
         await this.loadLatePenaltySettings();
+        await this.loadClaudeCLISettings();
+    }
+
+    async loadClaudeCLISettings() {
+        const statusEl = document.getElementById('claude-cli-status');
+        const toggleEl = document.getElementById('claude-cli-toggle');
+        if (!statusEl || !toggleEl) return;
+
+        try {
+            const [detection, setting] = await Promise.all([
+                window.electronAPI.claudeCli.detect(),
+                window.electronAPI.claudeCli.getSetting()
+            ]);
+
+            if (detection.available) {
+                statusEl.innerHTML = `<span style="color: #4CAF50;">✓ Detected${detection.version ? ' — ' + detection.version : ''}</span>`;
+                toggleEl.disabled = false;
+                toggleEl.checked = !!(setting && setting.enabled);
+            } else {
+                statusEl.innerHTML = '<span style="color: #e0a030;">Not detected. Install the Claude CLI and click Refresh to enable.</span>';
+                toggleEl.disabled = true;
+                toggleEl.checked = false;
+            }
+        } catch (error) {
+            statusEl.textContent = `Error checking Claude CLI: ${error.message}`;
+            toggleEl.disabled = true;
+        }
+    }
+
+    async toggleClaudeCLI() {
+        const toggleEl = document.getElementById('claude-cli-toggle');
+        if (!toggleEl) return;
+        try {
+            const result = await window.electronAPI.claudeCli.setSetting(toggleEl.checked);
+            if (result.success) {
+                this.showToast(`Claude CLI grading ${toggleEl.checked ? 'enabled' : 'disabled'}`, 'success');
+                await this.refreshLLMStatus();
+            } else {
+                this.showToast(`Error: ${result.error}`, 'error');
+                toggleEl.checked = !toggleEl.checked;
+            }
+        } catch (error) {
+            this.showToast(`Error: ${error.message}`, 'error');
+            toggleEl.checked = !toggleEl.checked;
+        }
     }
 
     async loadSupportedProviders() {
@@ -3184,16 +3351,32 @@ class UnityAutoGraderApp {
         const additionalFields = document.getElementById('additional-fields');
         const endpointField = document.getElementById('endpoint-field');
         const deploymentField = document.getElementById('deployment-field');
+        const modelField = document.getElementById('model-field');
+        const modelSelect = document.getElementById('api-model');
 
         // Hide all additional fields first
         additionalFields.style.display = 'none';
         endpointField.style.display = 'none';
         deploymentField.style.display = 'none';
+        if (modelField) modelField.style.display = 'none';
+        if (modelSelect) modelSelect.innerHTML = '';
 
         if (!provider) return;
 
         const providerInfo = this.supportedProviders[provider];
         if (!providerInfo) return;
+
+        // Populate the model dropdown from the provider's supported models.
+        if (modelSelect && Array.isArray(providerInfo.models)) {
+            for (const model of providerInfo.models) {
+                const opt = document.createElement('option');
+                opt.value = model;
+                opt.textContent = model;
+                modelSelect.appendChild(opt);
+            }
+            modelSelect.value = providerInfo.defaultModel || providerInfo.models[0] || '';
+            if (modelField) modelField.style.display = 'block';
+        }
 
         if (providerInfo.fields.includes('endpoint')) {
             additionalFields.style.display = 'block';
@@ -3229,10 +3412,14 @@ class UnityAutoGraderApp {
             return;
         }
 
+        const modelEl = document.getElementById('api-model');
         const config = {
             apiKey,
             isActive
         };
+        if (modelEl && modelEl.value) {
+            config.model = modelEl.value;
+        }
 
         const providerInfo = this.supportedProviders[provider];
         if (providerInfo && providerInfo.fields.includes('endpoint')) {
@@ -3287,6 +3474,12 @@ class UnityAutoGraderApp {
                 document.getElementById('api-is-active').checked = keyData.isActive !== false;
 
                 this.onProviderChange();
+
+                // Restore the saved model after onProviderChange populated the list.
+                const modelEl = document.getElementById('api-model');
+                if (modelEl && keyData.model) {
+                    modelEl.value = keyData.model;
+                }
                 document.getElementById('api-key-form').style.display = 'block';
             }
         } catch (error) {
@@ -3925,6 +4118,7 @@ class UnityAutoGraderApp {
         try {
             const name = document.getElementById('criteria-name').value.trim();
             const description = document.getElementById('criteria-description').value.trim();
+            const customInstructions = document.getElementById('custom-ai-instructions').value.trim();
 
             if (!name) {
                 this.showToast('Please enter a rubric name', 'warning');
@@ -3986,6 +4180,7 @@ class UnityAutoGraderApp {
                 id: this.currentEditingCriteriaId || `criteria-${Date.now()}`,
                 name,
                 description,
+                customInstructions: customInstructions || undefined,
                 totalPoints,
                 items,
                 createdAt: new Date().toISOString(),

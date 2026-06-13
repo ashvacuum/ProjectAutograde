@@ -1,7 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
-const express = require('express');
 
 // Load environment variables
 require('dotenv').config();
@@ -17,8 +16,6 @@ const LatePenaltyCalculator = require('./src/utils/late-penalty-calculator');
 
 const store = new Store();
 let mainWindow;
-let serverApp;
-let server;
 
 // Initialize service instances
 const canvasAuth = new CanvasAuth();
@@ -96,42 +93,15 @@ function createWindow() {
   });
 }
 
-function createExpressServer() {
-  serverApp = express();
-  serverApp.use(express.json());
-
-  serverApp.get('/health', (req, res) => {
-    res.json({ status: 'healthy', timestamp: new Date().toISOString() });
-  });
-
-  // Try different ports if 3001 is in use
-  const tryPorts = [3001, 3002, 3003, 3004, 3005];
-
-  function tryPort(portIndex) {
-    if (portIndex >= tryPorts.length) {
-      console.error('All ports are in use, server not started');
-      return;
-    }
-
-    const port = tryPorts[portIndex];
-    server = serverApp.listen(port, () => {
-      console.log(`AraLaro server running on port ${port}`);
-    }).on('error', (err) => {
-      if (err.code === 'EADDRINUSE') {
-        console.log(`Port ${port} is in use, trying next port...`);
-        tryPort(portIndex + 1);
-      } else {
-        console.error('Server error:', err);
-      }
-    });
-  }
-
-  tryPort(0);
-}
-
 app.whenReady().then(async () => {
   createWindow();
-  createExpressServer();
+
+  // Validate and cleanup invalid API keys on startup
+  try {
+    await apiKeyManager.validateAndCleanupKeys();
+  } catch (error) {
+    console.warn('⚠️  API key validation failed:', error.message);
+  }
 
   // Load stored Canvas credentials on startup
   try {
@@ -153,9 +123,6 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  if (server) {
-    server.close();
-  }
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -244,6 +211,15 @@ ipcMain.handle('canvas-get-submissions', async (event, courseId, assignmentId) =
   try {
     const api = canvasAuth.getAPI();
     return await api.getSubmissions(courseId, assignmentId);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('canvas-post-comment', async (event, courseId, assignmentId, userId, comment) => {
+  try {
+    const api = canvasAuth.getAPI();
+    return await api.postComment(courseId, assignmentId, userId, comment);
   } catch (error) {
     return { success: false, error: error.message };
   }
@@ -457,6 +433,36 @@ ipcMain.handle('llm-refresh-provider', async () => {
   }
 });
 
+// Claude CLI IPC Handlers
+ipcMain.handle('claude-cli-detect', async () => {
+  try {
+    const detection = await llmIntegration.claudeCLI.detect(true);
+    return { success: true, ...detection };
+  } catch (error) {
+    return { success: false, available: false, error: error.message };
+  }
+});
+
+ipcMain.handle('claude-cli-get-setting', async () => {
+  try {
+    return { success: true, enabled: store.get('useClaudeCLI', false) };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('claude-cli-set-setting', async (event, enabled) => {
+  try {
+    store.set('useClaudeCLI', !!enabled);
+    llmIntegration.setPreferCLI(!!enabled);
+    // Re-evaluate which backend is active now that the preference changed.
+    const isAvailable = await llmIntegration.initialize();
+    return { success: true, enabled: !!enabled, isAvailable };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
 // File System and Git IPC Handlers
 ipcMain.handle('git-clone-repo', async (event, url, destination) => {
   try {
@@ -656,6 +662,24 @@ ipcMain.handle('api-keys-clear-all', async () => {
   }
 });
 
+ipcMain.handle('api-keys-reset-store', async () => {
+  try {
+    const result = await apiKeyManager.resetStore();
+    return result;
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('api-keys-health-check', async () => {
+  try {
+    const result = await apiKeyManager.healthCheck();
+    return result;
+  } catch (error) {
+    return { success: false, healthy: false, error: error.message };
+  }
+});
+
 // Late Penalty Settings IPC Handlers
 ipcMain.handle('late-penalty-save-settings', async (event, settings) => {
   try {
@@ -712,13 +736,8 @@ ipcMain.handle('diagnostics-check-api-keys', async () => {
 
     console.log('Provider:', activeProvider.provider);
     console.log('Provider Name:', activeProvider.config.providerInfo?.name);
-    console.log('API Key Present:', !!apiKey);
-    console.log('API Key Length:', apiKey ? apiKey.length : 0);
-    console.log('API Key First 10:', apiKey ? apiKey.substring(0, 10) : 'N/A');
-    console.log('API Key Last 4:', apiKey ? '***' + apiKey.slice(-4) : 'N/A');
-    console.log('Contains spaces:', apiKey ? apiKey.includes(' ') : false);
-    console.log('Contains newlines:', apiKey ? apiKey.includes('\n') : false);
-    console.log('Trimmed length:', apiKey ? apiKey.trim().length : 0);
+    console.log('Model:', activeProvider.config.model || 'default');
+    console.log('API Key Configured:', !!apiKey);
     console.log('Is Active:', activeProvider.config.isActive);
     console.log('Created At:', activeProvider.config.createdAt);
     console.log('Last Used:', activeProvider.config.lastUsed);
@@ -740,13 +759,9 @@ ipcMain.handle('diagnostics-check-api-keys', async () => {
       success: true,
       provider: activeProvider.provider,
       providerName: activeProvider.config.providerInfo?.name,
+      model: activeProvider.config.model || 'default',
       apiKeyPresent: !!apiKey,
-      apiKeyLength: apiKey ? apiKey.length : 0,
       apiKeyPreview: apiKey ? '***' + apiKey.slice(-4) : 'N/A',
-      apiKeyFirst10: apiKey ? apiKey.substring(0, 10) : 'N/A',
-      containsSpaces: apiKey ? apiKey.includes(' ') : false,
-      containsNewlines: apiKey ? apiKey.includes('\n') : false,
-      trimmedLength: apiKey ? apiKey.trim().length : 0,
       isActive: activeProvider.config.isActive,
       createdAt: activeProvider.config.createdAt,
       lastUsed: activeProvider.config.lastUsed,
@@ -841,6 +856,8 @@ ipcMain.handle('results-delete', async (event, resultId) => {
 // Initialize LLM integration on startup
 app.whenReady().then(async () => {
   try {
+    // Apply the saved "use Claude CLI" preference before the first init.
+    llmIntegration.setPreferCLI(store.get('useClaudeCLI', false));
     const isAvailable = await llmIntegration.initialize();
     if (isAvailable) {
       console.log('✅ LLM integration ready');

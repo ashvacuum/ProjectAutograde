@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getCourses: () => ipcRenderer.invoke('canvas-get-courses'),
     getAssignments: (courseId) => ipcRenderer.invoke('canvas-get-assignments', courseId),
     getSubmissions: (courseId, assignmentId) => ipcRenderer.invoke('canvas-get-submissions', courseId, assignmentId),
+    postComment: (courseId, assignmentId, userId, comment) =>
+      ipcRenderer.invoke('canvas-post-comment', courseId, assignmentId, userId, comment),
     postGrade: (courseId, assignmentId, userId, grade, comment) =>
       ipcRenderer.invoke('canvas-post-grade', courseId, assignmentId, userId, grade, comment)
   },
@@ -52,6 +54,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     analyzeCode: (code, criteria, context) => ipcRenderer.invoke('llm-analyze', code, criteria, context),
     getAnalysisResult: (taskId) => ipcRenderer.invoke('llm-get-result', taskId),
     refreshProvider: () => ipcRenderer.invoke('llm-refresh-provider')
+  },
+
+  claudeCli: {
+    detect: () => ipcRenderer.invoke('claude-cli-detect'),
+    getSetting: () => ipcRenderer.invoke('claude-cli-get-setting'),
+    setSetting: (enabled) => ipcRenderer.invoke('claude-cli-set-setting', enabled)
   },
 
   export: {

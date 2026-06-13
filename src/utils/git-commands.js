@@ -1,7 +1,15 @@
-const { spawn, exec } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
+const simpleGit = require('simple-git');
 
+/**
+ * Git and filesystem helpers for cloning and inspecting student repositories.
+ *
+ * All git operations go through simple-git, which passes arguments as an array
+ * to the git binary (no shell string interpolation) — student-supplied repo
+ * URLs and branch names can never be interpreted as shell. Filesystem scans
+ * use fs APIs rather than spawning `dir` / `find` / `rm`.
+ */
 class GitCommands {
   constructor() {
     this.tempDir = path.join(__dirname, '../../temp');
@@ -15,132 +23,62 @@ class GitCommands {
     }
   }
 
-  async executeCommand(command, cwd = null) {
-    return new Promise((resolve, reject) => {
-      const options = cwd ? { cwd } : {};
-
-      exec(command, options, (error, stdout, stderr) => {
-        if (error) {
-          reject(new Error(`Command failed: ${command}\nError: ${error.message}\nStderr: ${stderr}`));
-        } else {
-          resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
-        }
-      });
-    });
-  }
-
   isValidGitHubUrl(url) {
     if (!url || typeof url !== 'string') {
       return false;
     }
-
-    // More permissive regex that handles various GitHub URL formats
     const githubRegex = /^https?:\/\/(www\.)?github\.com\/[\w.-]+\/[\w.-]+/;
     const cleanUrl = url.replace(/\.git$/, '').trim();
     return githubRegex.test(cleanUrl);
   }
 
-  async checkGitInstallation() {
-    try {
-      const result = await this.executeCommand('git --version');
-      return {
-        installed: true,
-        version: result.stdout
-      };
-    } catch (error) {
-      return {
-        installed: false,
-        error: 'Git is not installed or not available in PATH'
-      };
-    }
-  }
-
   async checkRepositoryExists(repoUrl) {
+    if (!this.isValidGitHubUrl(repoUrl)) {
+      return { exists: false, error: 'Invalid GitHub URL format' };
+    }
+
     try {
-      if (!this.isValidGitHubUrl(repoUrl)) {
-        return {
-          exists: false,
-          error: 'Invalid GitHub URL format'
-        };
-      }
-
-      // Use git ls-remote to check if repository exists without cloning
-      const command = `git ls-remote --heads "${repoUrl}"`;
-      console.log(`   Executing: ${command}`);
-      await this.executeCommand(command);
-
+      // listRemote passes args as an array — repoUrl is never shell-evaluated.
+      await simpleGit().listRemote(['--heads', repoUrl]);
       console.log('   ✅ Repository is public and accessible');
-      return {
-        exists: true,
-        accessible: true
-      };
+      return { exists: true, accessible: true };
     } catch (error) {
-      const errorMessage = error.message.toLowerCase();
+      const errorMessage = (error.message || '').toLowerCase();
 
-      // Check for various error patterns
       if (errorMessage.includes('repository not found') || errorMessage.includes('could not read from remote')) {
-        console.log('   ❌ Repository not found');
-        return {
-          exists: false,
-          accessible: false,
-          error: 'Repository not found or not accessible'
-        };
-      } else if (errorMessage.includes('authentication') ||
-                 errorMessage.includes('permission') ||
-                 errorMessage.includes('credentials') ||
-                 errorMessage.includes('denied') ||
-                 errorMessage.includes('403')) {
-        console.log('   🔒 Repository requires authentication (private)');
-        return {
-          exists: true,
-          accessible: false,
-          error: 'Repository is private or requires authentication'
-        };
-      } else if (errorMessage.includes('fatal:')) {
-        console.log('   ❌ Git fatal error detected');
-        return {
-          exists: false,
-          accessible: false,
-          error: `Repository access failed: ${error.message}`
-        };
-      } else {
-        console.log('   ❌ Unknown error:', error.message);
-        return {
-          exists: false,
-          accessible: false,
-          error: `Repository check failed: ${error.message}`
-        };
+        return { exists: false, accessible: false, error: 'Repository not found or not accessible' };
+      } else if (
+        errorMessage.includes('authentication') ||
+        errorMessage.includes('permission') ||
+        errorMessage.includes('credentials') ||
+        errorMessage.includes('denied') ||
+        errorMessage.includes('403')
+      ) {
+        return { exists: true, accessible: false, error: 'Repository is private or requires authentication' };
       }
+      return { exists: false, accessible: false, error: `Repository check failed: ${error.message}` };
     }
   }
 
   async cloneRepository(repoUrl, options = {}) {
     await this.ensureTempDir();
 
-    // First check if repository exists
     const repoCheck = await this.checkRepositoryExists(repoUrl);
     if (!repoCheck.exists) {
       throw new Error(repoCheck.error || 'Repository does not exist');
     }
 
     const repoName = this.extractRepoName(repoUrl);
-    const timestamp = Date.now();
-    const projectDir = path.join(this.tempDir, `${repoName}-${timestamp}`);
+    const projectDir = path.join(this.tempDir, `${repoName}-${Date.now()}`);
+
+    const cloneArgs = ['--depth', '1', '--single-branch'];
+    if (options.branch) {
+      cloneArgs.push('--branch', options.branch);
+    }
 
     try {
       console.log(`Cloning repository: ${repoUrl} to ${projectDir}`);
-
-      // Build git clone command
-      let cloneCommand = `git clone --depth 1 --single-branch`;
-
-      if (options.branch) {
-        cloneCommand += ` --branch "${options.branch}"`;
-      }
-
-      cloneCommand += ` "${repoUrl}" "${projectDir}"`;
-
-      await this.executeCommand(cloneCommand);
-
+      await simpleGit().clone(repoUrl, projectDir, cloneArgs);
       console.log(`Successfully cloned repository to: ${projectDir}`);
 
       return {
@@ -149,42 +87,37 @@ class GitCommands {
         url: repoUrl,
         clonedAt: new Date().toISOString()
       };
-
     } catch (error) {
-      // Clean up failed clone attempt
+      // Clean up a partial clone before surfacing the error.
       try {
         await this.deleteDirectory(projectDir);
       } catch (cleanupError) {
         console.warn('Failed to cleanup after clone error:', cleanupError);
       }
 
-      // Provide more specific error messages
-      if (error.message.includes('Repository not found')) {
+      const msg = error.message || '';
+      if (msg.includes('Repository not found')) {
         throw new Error('Repository not found. Please check the URL and ensure the repository is public or you have access.');
-      } else if (error.message.includes('Authentication failed')) {
+      } else if (msg.includes('Authentication failed')) {
         throw new Error('Authentication failed. For private repositories, please provide a GitHub token.');
-      } else if (error.message.includes('network')) {
+      } else if (/network/i.test(msg)) {
         throw new Error('Network error. Please check your internet connection.');
-      } else {
-        throw new Error(`Failed to clone repository: ${error.message}`);
       }
+      throw new Error(`Failed to clone repository: ${msg}`);
     }
   }
 
   async deleteDirectory(dirPath) {
     try {
-      if (dirPath && dirPath.includes('temp')) {
-        if (process.platform === 'win32') {
-          await this.executeCommand(`rmdir /s /q "${dirPath}"`);
-        } else {
-          await this.executeCommand(`rm -rf "${dirPath}"`);
-        }
-        console.log(`Deleted directory: ${dirPath}`);
-        return true;
-      } else {
+      // Guard: only ever delete inside our temp directory.
+      const resolved = path.resolve(dirPath);
+      if (!resolved.startsWith(path.resolve(this.tempDir))) {
         console.warn(`Skipping deletion of non-temp directory: ${dirPath}`);
         return false;
       }
+      await fs.rm(resolved, { recursive: true, force: true });
+      console.log(`Deleted directory: ${resolved}`);
+      return true;
     } catch (error) {
       console.error(`Failed to delete directory ${dirPath}:`, error.message);
       return false;
@@ -193,32 +126,37 @@ class GitCommands {
 
   async getRepositoryInfo(projectPath) {
     try {
-      const commands = {
-        branch: 'git rev-parse --abbrev-ref HEAD',
-        hash: 'git rev-parse --short HEAD',
-        lastCommit: 'git log -1 --pretty=format:"%h %s %an %ad" --date=short',
-        remoteUrl: 'git config --get remote.origin.url',
-        status: 'git status --porcelain'
-      };
-
+      const git = simpleGit(projectPath);
       const results = {};
 
-      for (const [key, command] of Object.entries(commands)) {
+      const tryGet = async (key, fn) => {
         try {
-          const result = await this.executeCommand(command, projectPath);
-          results[key] = result.stdout;
+          results[key] = await fn();
         } catch (error) {
           results[key] = null;
           console.warn(`Failed to get ${key}:`, error.message);
         }
-      }
+      };
+
+      await tryGet('branch', async () => (await git.branch()).current);
+      await tryGet('hash', async () => (await git.revparse(['--short', 'HEAD'])).trim());
+      await tryGet('lastCommit', async () => {
+        const log = await git.log(['-1', '--pretty=format:%h %s %an %ad', '--date=short']);
+        return log.latest ? log.latest.hash : null;
+      });
+      await tryGet('remoteUrl', async () => {
+        const remotes = await git.getRemotes(true);
+        const origin = remotes.find(r => r.name === 'origin');
+        return origin ? origin.refs.fetch : null;
+      });
+      await tryGet('isClean', async () => (await git.status()).isClean());
 
       return {
         currentBranch: results.branch,
         commitHash: results.hash,
         lastCommit: results.lastCommit,
         remoteUrl: results.remoteUrl,
-        isClean: !results.status || results.status.length === 0,
+        isClean: results.isClean !== false,
         path: projectPath
       };
     } catch (error) {
@@ -235,18 +173,17 @@ class GitCommands {
   }
 
   async validateUnityProject(projectPath) {
-    try {
-      const validation = {
-        isValidUnityProject: false,
-        hasAssets: false,
-        hasProjectSettings: false,
-        hasScripts: false,
-        hasScenes: false,
-        errors: [],
-        warnings: []
-      };
+    const validation = {
+      isValidUnityProject: false,
+      hasAssets: false,
+      hasProjectSettings: false,
+      hasScripts: false,
+      hasScenes: false,
+      errors: [],
+      warnings: []
+    };
 
-      // Check if Assets folder exists
+    try {
       try {
         await fs.access(path.join(projectPath, 'Assets'));
         validation.hasAssets = true;
@@ -254,7 +191,6 @@ class GitCommands {
         validation.errors.push('Assets folder not found');
       }
 
-      // Check if ProjectSettings folder exists
       try {
         await fs.access(path.join(projectPath, 'ProjectSettings'));
         validation.hasProjectSettings = true;
@@ -269,13 +205,11 @@ class GitCommands {
         return validation;
       }
 
-      // Check for C# scripts
       validation.hasScripts = await this.hasFilesWithExtension(projectPath, '.cs');
       if (!validation.hasScripts) {
         validation.warnings.push('No C# scripts found');
       }
 
-      // Check for Unity scenes
       validation.hasScenes = await this.hasFilesWithExtension(projectPath, '.unity');
       if (!validation.hasScenes) {
         validation.warnings.push('No Unity scenes found');
@@ -283,45 +217,42 @@ class GitCommands {
 
       return validation;
     } catch (error) {
-      return {
-        isValidUnityProject: false,
-        hasAssets: false,
-        hasProjectSettings: false,
-        hasScripts: false,
-        hasScenes: false,
-        errors: [`Validation failed: ${error.message}`],
-        warnings: []
-      };
+      validation.errors.push(`Validation failed: ${error.message}`);
+      return validation;
     }
   }
 
-  async hasFilesWithExtension(dirPath, extension) {
+  // Recursively collect files with the given extension, skipping .git.
+  async _walkForExtension(dirPath, extension, results, limit = Infinity) {
+    let entries;
     try {
-      if (process.platform === 'win32') {
-        const command = `dir /s /b "${dirPath}\\*${extension}" 2>nul`;
-        const result = await this.executeCommand(command);
-        return result.stdout.length > 0;
-      } else {
-        const command = `find "${dirPath}" -name "*${extension}" -type f 2>/dev/null | head -1`;
-        const result = await this.executeCommand(command);
-        return result.stdout.length > 0;
-      }
+      entries = await fs.readdir(dirPath, { withFileTypes: true });
     } catch (error) {
-      return false;
+      return results;
     }
+
+    for (const entry of entries) {
+      if (results.length >= limit) return results;
+      if (entry.name === '.git' || entry.name === 'node_modules') continue;
+
+      const fullPath = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        await this._walkForExtension(fullPath, extension, results, limit);
+      } else if (entry.isFile() && entry.name.toLowerCase().endsWith(extension.toLowerCase())) {
+        results.push(fullPath);
+      }
+    }
+    return results;
+  }
+
+  async hasFilesWithExtension(dirPath, extension) {
+    const found = await this._walkForExtension(dirPath, extension, [], 1);
+    return found.length > 0;
   }
 
   async findCSharpFiles(projectPath) {
     try {
-      let command;
-      if (process.platform === 'win32') {
-        command = `dir /s /b "${projectPath}\\*.cs" 2>nul`;
-      } else {
-        command = `find "${projectPath}" -name "*.cs" -type f 2>/dev/null`;
-      }
-
-      const result = await this.executeCommand(command);
-      return result.stdout.split(/\r?\n/).filter(line => line.trim().length > 0);
+      return await this._walkForExtension(projectPath, '.cs', []);
     } catch (error) {
       console.warn('Failed to find C# files:', error);
       return [];
@@ -332,86 +263,9 @@ class GitCommands {
     try {
       const url = new URL(repoUrl);
       const pathParts = url.pathname.split('/').filter(part => part.length > 0);
-      return pathParts[pathParts.length - 1].replace('.git', '') || 'unknown-repo';
+      return (pathParts[pathParts.length - 1] || 'unknown-repo').replace(/\.git$/, '');
     } catch (error) {
       return 'unknown-repo';
-    }
-  }
-
-  async setupProjectRemote() {
-    try {
-      const remoteUrl = 'https://github.com/ashvacuum/ProjectAutograde.git';
-
-      // Check if we're in a git repository
-      try {
-        await this.executeCommand('git status');
-      } catch (error) {
-        // Initialize git repository
-        await this.executeCommand('git init');
-        console.log('Initialized git repository');
-      }
-
-      // Check if remote already exists
-      try {
-        const result = await this.executeCommand('git remote get-url origin');
-        if (result.stdout === remoteUrl) {
-          console.log('Remote origin already set correctly');
-          return true;
-        } else {
-          // Update existing remote
-          await this.executeCommand(`git remote set-url origin "${remoteUrl}"`);
-          console.log('Updated remote origin URL');
-        }
-      } catch (error) {
-        // Add new remote
-        await this.executeCommand(`git remote add origin "${remoteUrl}"`);
-        console.log('Added remote origin');
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Failed to setup project remote:', error);
-      return false;
-    }
-  }
-
-  async commitAndPush(message = 'Auto-grader application update') {
-    try {
-      // Add all files
-      await this.executeCommand('git add .');
-
-      // Check if there are changes to commit
-      try {
-        await this.executeCommand('git diff --cached --exit-code');
-        console.log('No changes to commit');
-        return { success: true, message: 'No changes to commit' };
-      } catch (error) {
-        // There are changes to commit (git diff returns non-zero exit code)
-      }
-
-      // Commit changes
-      await this.executeCommand(`git commit -m "${message}"`);
-      console.log('Changes committed');
-
-      // Push to remote
-      await this.executeCommand('git push origin main');
-      console.log('Changes pushed to remote');
-
-      return { success: true, message: 'Changes committed and pushed successfully' };
-    } catch (error) {
-      console.error('Failed to commit and push:', error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  async pullLatest() {
-    try {
-      await this.executeCommand('git pull origin main');
-      console.log('Pulled latest changes from remote');
-      return { success: true, message: 'Successfully pulled latest changes' };
-    } catch (error) {
-      console.error('Failed to pull latest changes:', error);
-      return { success: false, error: error.message };
     }
   }
 }
