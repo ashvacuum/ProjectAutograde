@@ -107,7 +107,7 @@ export default (Base) => class extends Base {
             return;
         }
 
-        html += '<table class="table"><thead><tr><th>Student</th><th>Status</th><th>Grade</th><th>GitHub URL</th><th>Actions</th></tr></thead><tbody>';
+        html += '<table class="table"><thead><tr><th>Student</th><th>Status</th><th>Grade</th><th>Repo</th><th>Actions</th></tr></thead><tbody>';
 
         filteredResults.forEach((result, index) => {
             const originalIndex = this.gradingResults.indexOf(result);
@@ -131,12 +131,14 @@ export default (Base) => class extends Base {
             // Instructor-only flag from the AI-authorship check
             const suspicion = gradeData.authorship?.suspicion;
             const aiBadge = suspicion === 'medium' || suspicion === 'high'
-                ? ` <span title="${(gradeData.authorship.reasons || []).join('; ').replace(/"/g, '&quot;')}" style="background: ${suspicion === 'high' ? '#c0392b' : '#e67e22'}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-left: 4px;">AI? ${suspicion}</span>`
+                ? ` <span title="${(gradeData.authorship.reasons || []).join('; ').replace(/"/g, '&quot;')}" style="background: ${suspicion === 'high' ? '#c0392b' : '#e67e22'}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-left: 4px; white-space: nowrap; display: inline-block;">AI? ${suspicion}</span>`
                 : '';
 
+            // A button instead of the full link, so the actions column has room;
+            // the full URL is in the tooltip
             const githubUrl = result.githubUrl
-                ? `<a href="${result.githubUrl}" target="_blank" style="color: #3498db; text-decoration: none;">${result.githubUrl.substring(0, 30)}...</a>`
-                : 'Not provided';
+                ? `<button class="btn btn-secondary" style="white-space: nowrap;" onclick="app.openResultRepo(${originalIndex})" title="${result.githubUrl.replace(/"/g, '&quot;')}">Open repo ↗</button>`
+                : '<span style="opacity: 0.7;">Not provided</span>';
 
             html += `
                 <tr style="${result.needsInstructorIntervention ? 'background: rgba(231, 76, 60, 0.1);' : ''}">
@@ -145,18 +147,20 @@ export default (Base) => class extends Base {
                     <td>${grade}</td>
                     <td>${githubUrl}</td>
                     <td>
-                        <button class="btn btn-secondary" onclick="app.viewDetailedResult(${originalIndex})">View Details</button>
-                        ${result.needsInstructorIntervention ?
-                            `<button class="btn" onclick="app.openCanvasSubmission(${originalIndex})" style="margin-left: 8px;">Review in Canvas</button>` :
-                            result.postedToCanvas && !result.regraded ?
-                            `<button class="btn" disabled style="margin-left: 8px; opacity: 0.5; cursor: not-allowed;" title="Already posted to Canvas">Posted to Canvas</button>` :
-                            `<button class="btn" onclick="app.postGradeToCanvas(${originalIndex})" style="margin-left: 8px;">${result.postedToCanvas ? 'Re-post' : 'Post'} to Canvas</button>`
-                        }
-                        ${(result.errorType === 'private_repo' || result.errorType === 'not_found') && !result.commentPosted ?
-                            `<button class="btn" onclick="app.postInaccessibleComment(${originalIndex})" style="margin-left: 8px; background: #f39c12;">Comment on Access Issue</button>` :
-                            ''
-                        }
-                        <button class="btn btn-secondary" onclick="app.regradeSubmission(${originalIndex})" style="margin-left: 8px;">Regrade</button>
+                        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                            <button class="btn btn-secondary" onclick="app.viewDetailedResult(${originalIndex})">View Details</button>
+                            ${result.needsInstructorIntervention ?
+                                `<button class="btn" onclick="app.openCanvasSubmission(${originalIndex})">Review in Canvas</button>` :
+                                result.postedToCanvas && !result.regraded ?
+                                `<button class="btn" disabled style="opacity: 0.5; cursor: not-allowed;" title="Already posted to Canvas">Posted to Canvas</button>` :
+                                `<button class="btn" onclick="app.postGradeToCanvas(${originalIndex})">${result.postedToCanvas ? 'Re-post' : 'Post'} to Canvas</button>`
+                            }
+                            ${(result.errorType === 'private_repo' || result.errorType === 'not_found') && !result.commentPosted ?
+                                `<button class="btn" onclick="app.postInaccessibleComment(${originalIndex})" style="background: #f39c12;">Comment on Access Issue</button>` :
+                                ''
+                            }
+                            <button class="btn btn-secondary" onclick="app.regradeSubmission(${originalIndex})">Regrade</button>
+                        </div>
                     </td>
                 </tr>
             `;
@@ -993,6 +997,12 @@ export default (Base) => class extends Base {
             console.error('❌ Regrade exception:', error);
             this.showToast(`Error during regrade: ${error.message}`, 'error');
         }
+    }
+
+    // Open a result's repository (including the linked branch) in the browser
+    openResultRepo(index) {
+        const url = this.gradingResults[index]?.githubUrl;
+        if (url) window.electronAPI.app.openExternal(url);
     }
 
     // "Post comments with grades": stored so the main process can drop the

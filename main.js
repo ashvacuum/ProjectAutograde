@@ -169,6 +169,8 @@ ipcMain.handle('show-open-dialog', async (event, options) => {
 });
 
 ipcMain.handle('open-external', async (event, url) => {
+  // Links come from student submissions: only open web pages
+  if (!/^https?:\/\//i.test(String(url))) return false;
   await shell.openExternal(url);
   return true;
 });
