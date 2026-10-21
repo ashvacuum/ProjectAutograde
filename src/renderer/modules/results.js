@@ -124,9 +124,14 @@ export default (Base) => class extends Base {
                 }
             }
             const gradeData = result.grade?.result || result.grade || {};
-            // Same one-decimal rounding as what gets posted (CanvasAPI.roundScore)
-            const shown = typeof gradeValue === 'number' ? Math.round(gradeValue * 10) / 10 : gradeValue;
-            const grade = gradeValue !== 'N/A' ? `${shown}/${gradeData.maxPoints || 50}` : 'N/A';
+            // Same one-decimal rounding as what gets posted (CanvasAPI.roundScore);
+            // an instructor adjustment shows the AI's original next to it
+            const shownValue = result.override ? this.postedScore(result) : gradeValue;
+            const shown = typeof shownValue === 'number' ? Math.round(shownValue * 10) / 10 : shownValue;
+            const grade = gradeValue !== 'N/A'
+                ? `${shown}/${gradeData.maxPoints || 50}` +
+                  (result.override ? ` <span style="font-size: 12px; opacity: 0.75; white-space: nowrap;" title="Adjusted by you">(AI: ${Math.round(gradeValue * 10) / 10})</span>` : '')
+                : 'N/A';
 
             // Instructor-only flag from the AI-authorship check
             const suspicion = gradeData.authorship?.suspicion;
@@ -415,11 +420,12 @@ export default (Base) => class extends Base {
             // Grade Summary
             detailsHtml += `
                 <div class="grade-summary">
-                    <div style="margin-bottom: 8px; opacity: 0.7; font-size: 14px;">Overall Grade</div>
+                    <div style="margin-bottom: 8px; opacity: 0.7; font-size: 14px;">${result.override ? 'Overall Grade (adjusted by you)' : 'Overall Grade'}</div>
                     <div>
-                        <span class="main-grade">${grade.overallGrade}</span>
+                        <span class="main-grade">${this.postedScore(result)}</span>
                         <span class="max-grade">/ ${grade.maxPoints || 50}</span>
                     </div>
+                    ${result.override ? `<div style="margin-top: 6px; opacity: 0.7; font-size: 13px;">AI score: ${grade.overallGrade} / ${grade.maxPoints || 50}</div>` : ''}
                 </div>
             `;
 
@@ -441,9 +447,27 @@ export default (Base) => class extends Base {
             // Comment that will be posted to Canvas, and the instructor-only
             // authorship check (never posted)
             const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+            const override = result.override;
+            const maxPoints = grade.maxPoints || 50;
             detailsHtml += `
-                <h3 style="margin: 24px 0 8px 0; font-size: 18px;">Canvas Comment</h3>
-                <pre style="white-space: pre-wrap; font-family: inherit; margin: 0;">${esc(this.buildCanvasFeedback(grade))}</pre>
+                <h3 style="margin: 24px 0 8px 0; font-size: 18px;">What will be posted to Canvas</h3>
+                ${override ? `<p style="margin: 0 0 8px 0; color: #f39c12;">Adjusted by you on ${new Date(override.adjustedAt).toLocaleString()} (AI score was ${esc(override.aiScore)}/${maxPoints}).</p>` : ''}
+                <pre style="white-space: pre-wrap; font-family: inherit; margin: 0;">${esc(this.buildCanvasFeedback(grade, override) || `Score ${this.postedScore(result)}/${maxPoints}, with no comment`)}</pre>
+
+                <div style="margin-top: 16px; padding: 16px; border-radius: 8px; background: rgba(255,255,255,0.06);">
+                    <h4 style="margin: 0 0 12px 0;">Adjust before posting</h4>
+                    <label style="display: block; font-size: 14px; margin-bottom: 4px;">Score (0 to ${maxPoints})</label>
+                    <input id="adjust-score" type="number" min="0" max="${maxPoints}" step="0.1"
+                           value="${esc(this.postedScore(result) ?? '')}"
+                           style="width: 120px; padding: 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: inherit;">
+                    <label style="display: block; font-size: 14px; margin: 12px 0 4px 0;">Comment (leave empty to post the score only)</label>
+                    <textarea id="adjust-comment" rows="3"
+                              style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: inherit; resize: vertical;">${esc(override ? override.comment : this.aiCommentBody(grade))}</textarea>
+                    <div style="display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;">
+                        <button class="btn" onclick="app.saveAdjustment(${index})">Save adjustment</button>
+                        ${override ? `<button class="btn btn-secondary" onclick="app.resetAdjustment(${index})">Reset to AI score and comment</button>` : ''}
+                    </div>
+                </div>
             `;
             if (grade.usage) {
                 detailsHtml += `
@@ -728,23 +752,18 @@ export default (Base) => class extends Base {
         console.log('User ID:', userId);
 
         try {
-            let grade = 0;
-            if (result.grade.overallGrade !== undefined) {
-                grade = result.grade.overallGrade;
-                console.log('✅ Found grade in result.grade.overallGrade:', grade);
-            } else if (result.grade.result?.overallGrade !== undefined) {
-                grade = result.grade.result.overallGrade;
-                console.log('✅ Found grade in result.grade.result.overallGrade:', grade);
-            } else {
+            // The instructor's adjusted score wins over the AI's
+            const grade = this.postedScore(result);
+            if (grade === undefined || grade === null) {
                 console.error('❌ Cannot find overallGrade in result structure');
                 console.log('result.grade structure:', result.grade);
                 this.showToast('Cannot extract grade from result', 'error');
                 return;
             }
 
-            console.log('Final grade to post:', grade);
+            console.log('Final grade to post:', grade, result.override ? '(adjusted by instructor)' : '');
 
-            const feedback = this.buildCanvasFeedback(result.grade);
+            const feedback = this.buildCanvasFeedback(result.grade, result.override);
             console.log('Feedback length:', feedback.length, 'characters');
 
             console.log('📡 Calling Canvas API...');
@@ -962,6 +981,7 @@ export default (Base) => class extends Base {
                 result.error = null; // Clear any previous errors
                 result.regradedAt = new Date().toISOString();
                 result.regraded = true; // Mark as regraded to allow re-posting to Canvas
+                delete result.override; // An adjustment was for the old grade
 
                 console.log('✅ Result updated successfully');
                 this.showToast(`Regrade completed for ${result.studentName}!`, 'success');
@@ -1058,10 +1078,30 @@ export default (Base) => class extends Base {
     // The comment posted to Canvas: the score and a short note on only the
     // most significant points. The full breakdown stays in the app. The
     // authorship check is instructor-only and never goes into this.
-    buildCanvasFeedback(gradeResult) {
+    // An instructor override ({ score, comment }) replaces the AI's score and
+    // comment body; the "Score:" line is always rebuilt from the posted score.
+    buildCanvasFeedback(gradeResult, override = null) {
         const result = gradeResult.result || gradeResult;
         const maxPoints = result.maxPoints || 50;
 
+        const comment = override && override.comment !== undefined
+            ? override.comment.trim()
+            : this.aiCommentBody(gradeResult);
+
+        // The instructor cleared the comment: post the score with no comment at all
+        if (override && !comment) return '';
+
+        // Same one-decimal rounding as the posted score (CanvasAPI.roundScore)
+        const raw = this.postedScore({ grade: gradeResult, override });
+        const score = Number.isFinite(Number(raw)) ? Math.round(Number(raw) * 10) / 10 : raw;
+        return comment
+            ? `Score: ${score}/${maxPoints}\n${comment}`
+            : `Score: ${score}/${maxPoints}`;
+    }
+
+    // The AI's short comment for the student, without the "Score:" line
+    aiCommentBody(gradeResult) {
+        const result = gradeResult.result || gradeResult;
         let comment = (result.canvasComment || '').trim();
         if (!comment) {
             comment = result.overallFeedback?.improvements?.[0] ||
@@ -1070,14 +1110,55 @@ export default (Base) => class extends Base {
         if (comment.length > 300) {
             comment = comment.slice(0, 297).replace(/\s+\S*$/, '') + '...';
         }
+        return comment;
+    }
 
-        // Same one-decimal rounding as the posted score (CanvasAPI.roundScore)
-        const score = Number.isFinite(Number(result.overallGrade))
-            ? Math.round(Number(result.overallGrade) * 10) / 10
-            : result.overallGrade;
-        return comment
-            ? `Score: ${score}/${maxPoints}\n${comment}`
-            : `Score: ${score}/${maxPoints}`;
+    // The score that will be posted: the instructor's override, else the AI's
+    postedScore(result) {
+        if (result.override && Number.isFinite(Number(result.override.score))) {
+            return Number(result.override.score);
+        }
+        const grade = result.grade?.result || result.grade || {};
+        return grade.overallGrade;
+    }
+
+    // Save the instructor's score/comment from the Details editor
+    async saveAdjustment(index) {
+        const result = this.gradingResults[index];
+        if (!result?.grade) return;
+        const grade = result.grade.result || result.grade;
+        const maxPoints = grade.maxPoints || 50;
+
+        const score = Number(document.getElementById('adjust-score')?.value);
+        if (!Number.isFinite(score) || score < 0 || score > maxPoints) {
+            this.showToast(`Score must be a number from 0 to ${maxPoints}`, 'warning');
+            return;
+        }
+        const comment = document.getElementById('adjust-comment')?.value ?? '';
+
+        result.override = {
+            score: Math.round(score * 10) / 10,
+            comment,
+            aiScore: grade.overallGrade,
+            adjustedAt: new Date().toISOString()
+        };
+        if (result.postedToCanvas) result.regraded = true; // allow Re-post with the new score
+
+        await this.saveGradingResults();
+        this.loadGradingResults();
+        this.viewDetailedResult(index);
+        this.showToast(`Adjustment saved for ${result.studentName}. Post to Canvas to send it.`, 'success');
+    }
+
+    async resetAdjustment(index) {
+        const result = this.gradingResults[index];
+        if (!result?.override) return;
+        delete result.override;
+        if (result.postedToCanvas) result.regraded = true;
+        await this.saveGradingResults();
+        this.loadGradingResults();
+        this.viewDetailedResult(index);
+        this.showToast(`Back to the AI's score and comment for ${result.studentName}`, 'info');
     }
 
     markAsResolved(index) {
