@@ -75,21 +75,48 @@ class CanvasAPI {
     return start <= now && now <= end;
   }
 
+  /**
+   * True when either of the assignment's dates (available-from or due) falls
+   * inside the course's active period. Undated assignments pass; the
+   * has-submissions filter handles those.
+   */
+  isAssignmentInTerm(assignment, course) {
+    const own = course.restrict_enrollments_to_course_dates ? course : {};
+    const term = course.term || {};
+    const startAt = own.start_at || term.start_at;
+    const endAt = own.end_at || term.end_at;
+    const start = startAt ? Date.parse(startAt) : -Infinity;
+    const end = endAt ? Date.parse(endAt) : Infinity;
+    const dates = [assignment.unlock_at, assignment.due_at].filter(Boolean).map(Date.parse);
+    return dates.length === 0 || dates.some(d => start <= d && d <= end);
+  }
+
   async getAssignments(courseId) {
     try {
-      const response = await axios.get(`${this.baseUrl}/courses/${courseId}/assignments`, {
-        headers: this.headers,
-        params: {
-          per_page: 100,
-          order_by: 'due_at'
-        }
-      });
+      const [response, courseResponse] = await Promise.all([
+        axios.get(`${this.baseUrl}/courses/${courseId}/assignments`, {
+          headers: this.headers,
+          params: { per_page: 100 }
+        }),
+        axios.get(`${this.baseUrl}/courses/${courseId}`, {
+          headers: this.headers,
+          params: { include: ['term'] }
+        })
+      ]);
+      const course = courseResponse.data;
+      // Sort by when the assignment opens; undated ones go last.
+      const availableAt = a => Date.parse(a.unlock_at || a.due_at) || Infinity;
+
       return {
         success: true,
-        assignments: response.data.filter(assignment =>
-          assignment.submission_types.includes('online_url') ||
-          assignment.submission_types.includes('online_text_entry')
-        )
+        assignments: response.data
+          .filter(assignment =>
+            (assignment.submission_types.includes('online_url') ||
+              assignment.submission_types.includes('online_text_entry')) &&
+            assignment.has_submitted_submissions &&
+            this.isAssignmentInTerm(assignment, course)
+          )
+          .sort((a, b) => availableAt(a) - availableAt(b))
       };
     } catch (error) {
       return {

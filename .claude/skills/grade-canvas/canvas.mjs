@@ -50,13 +50,25 @@ async function getAll(acct, p) {
   return out;
 }
 
-// Same rule as CanvasAPI.isCurrentCourse in the app: course dates when the
-// course overrides its term and has them, else term dates; missing = open-ended.
-function isCurrent(course, now = Date.now()) {
+// Same rules as CanvasAPI.isCurrentCourse / isAssignmentInTerm in the app:
+// course dates when the course overrides its term and has them, else term
+// dates; missing = open-ended.
+function period(course) {
   const own = course.restrict_enrollments_to_course_dates ? course : {};
   const startAt = own.start_at || course.term?.start_at;
   const endAt = own.end_at || course.term?.end_at;
-  return (startAt ? Date.parse(startAt) : -Infinity) <= now && now <= (endAt ? Date.parse(endAt) : Infinity);
+  return [startAt ? Date.parse(startAt) : -Infinity, endAt ? Date.parse(endAt) : Infinity];
+}
+
+function isCurrent(course, now = Date.now()) {
+  const [start, end] = period(course);
+  return start <= now && now <= end;
+}
+
+function inTerm(assignment, course) {
+  const [start, end] = period(course);
+  const dates = [assignment.unlock_at, assignment.due_at].filter(Boolean).map(Date.parse);
+  return dates.length === 0 || dates.some(d => start <= d && d <= end);
 }
 
 function githubUrl(text) {
@@ -72,8 +84,20 @@ const commands = {
     .filter(c => scope === 'all' || isCurrent(c))
     .map(c => ({ id: c.id, name: c.name, term: c.term?.name })),
 
-  assignments: async (name, courseId) => (await getAll(account(name), `/courses/${courseId}/assignments`))
-    .map(a => ({ id: a.id, name: a.name, due_at: a.due_at, points_possible: a.points_possible, description: a.description })),
+  // This term's assignments that have submissions, sorted by available date;
+  // pass "all" to skip the filtering.
+  assignments: async (name, courseId, scope) => {
+    const acct = account(name);
+    const [list, course] = await Promise.all([
+      getAll(acct, `/courses/${courseId}/assignments`),
+      request(acct, 'GET', `/courses/${courseId}?include[]=term`).then(r => r.json())
+    ]);
+    const availableAt = a => Date.parse(a.unlock_at || a.due_at) || Infinity;
+    return list
+      .filter(a => scope === 'all' || (a.has_submitted_submissions && inTerm(a, course)))
+      .sort((a, b) => availableAt(a) - availableAt(b))
+      .map(a => ({ id: a.id, name: a.name, unlock_at: a.unlock_at, due_at: a.due_at, points_possible: a.points_possible, description: a.description }));
+  },
 
   submissions: async (name, courseId, assignmentId) =>
     (await getAll(account(name), `/courses/${courseId}/assignments/${assignmentId}/submissions?include[]=user`))

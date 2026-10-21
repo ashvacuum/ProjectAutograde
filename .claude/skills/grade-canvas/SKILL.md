@@ -13,7 +13,7 @@ Helper: `node .claude/skills/grade-canvas/canvas.mjs <command>` (prints JSON):
 |---|---|
 | `accounts` | Configured Canvas accounts |
 | `courses <acct> [all]` | Courses you teach in the current term (id, name, term); `all` includes past and future terms |
-| `assignments <acct> <course>` | Assignments (id, name, due date, points, description) |
+| `assignments <acct> <course> [all]` | This term's assignments that have submissions, sorted by available date (id, name, unlock/due dates, points, description); `all` lists everything |
 | `submissions <acct> <course> <assignment>` | Submitted work: user_id, name, late/days_late, score, graded, github_url |
 | `grade <acct> <course> <assignment> <user> <score> [commentFile]` | Posts a score and optional feedback comment |
 
