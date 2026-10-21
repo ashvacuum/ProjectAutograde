@@ -921,7 +921,8 @@ export default (Base) => class extends Base {
                             name: this.currentAssignment.assignmentDetails?.name || '',
                             description: this.currentAssignment.assignmentDetails?.description || '',
                             due_at: this.currentAssignment.assignmentDetails?.due_at || null,
-                            points_possible: this.currentAssignment.assignmentDetails?.points_possible || 0
+                            points_possible: this.currentAssignment.assignmentDetails?.points_possible || 0,
+                            rubric: this.currentAssignment.assignmentDetails?.rubric || null
                         };
 
                         // Ensure it's serializable
@@ -1734,7 +1735,8 @@ export default (Base) => class extends Base {
                     description: assignment.description || '',
                     due_at: assignment.due_at || null,
                     points_possible: assignment.points_possible || null,
-                    id: assignment.id || null
+                    id: assignment.id || null,
+                    rubric: assignment.rubric || null
                 };
             }
 

@@ -7,6 +7,7 @@ require('dotenv').config();
 
 // Import our custom modules
 const CanvasAuth = require('./src/canvas/canvas-auth');
+const CanvasAPI = require('./src/canvas/canvas-api');
 const UnityGrader = require('./src/grader/unity-grader');
 const LLMIntegration = require('./src/grader/llm-integration');
 const CriteriaManager = require('./src/criteria/criteria-manager');
@@ -248,8 +249,18 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
 
   try {
     // Ensure all data is serializable
-    const cleanCriteria = JSON.parse(JSON.stringify(criteria));
+    let cleanCriteria = JSON.parse(JSON.stringify(criteria));
     const cleanAssignmentDetails = assignmentDetails ? JSON.parse(JSON.stringify(assignmentDetails)) : null;
+
+    // A rubric attached to the assignment in Canvas replaces the selected
+    // template's items; template settings like custom instructions are kept.
+    if (cleanAssignmentDetails?.rubric?.length) {
+      cleanCriteria = {
+        ...cleanCriteria,
+        ...CanvasAPI.rubricToCriteria(cleanAssignmentDetails.rubric, `${cleanAssignmentDetails.name || 'Assignment'} (Canvas rubric)`)
+      };
+      console.log(`📋 Using Canvas rubric: ${cleanCriteria.items.length} criteria, ${cleanCriteria.totalPoints} pts`);
+    }
 
     console.log('✅ Data serialization successful');
 
@@ -306,6 +317,12 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
       console.log('✅ LLM grading complete');
       console.log(`   Overall grade: ${gradingResult.result?.overallGrade || 'N/A'}`);
       console.log(`   Duration: ${duration}s`);
+
+      // Label scores with criterion names (Canvas IDs like "_8484" mean nothing in the UI)
+      for (const item of cleanCriteria.items || []) {
+        const score = gradingResult.result?.criteriaScores?.[item.id];
+        if (score && !score.name) score.name = item.name;
+      }
 
       // Apply late penalty if applicable
       let finalGrade = gradingResult.result;

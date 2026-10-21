@@ -99,6 +99,23 @@ const commands = {
       .map(a => ({ id: a.id, name: a.name, unlock_at: a.unlock_at, due_at: a.due_at, points_possible: a.points_possible, description: a.description }));
   },
 
+  // The rubric attached to the assignment in Canvas, or null if none.
+  rubric: async (name, courseId, assignmentId) => {
+    const a = await (await request(account(name), 'GET', `/courses/${courseId}/assignments/${assignmentId}`)).json();
+    if (!a.rubric) return null;
+    return {
+      title: a.rubric_settings?.title,
+      points_possible: a.rubric_settings?.points_possible,
+      criteria: a.rubric.map(c => ({
+        id: c.id,
+        points: c.points,
+        description: c.description,
+        long_description: c.long_description || undefined,
+        ratings: c.ratings.map(r => ({ points: r.points, description: r.description, long_description: r.long_description || undefined }))
+      }))
+    };
+  },
+
   submissions: async (name, courseId, assignmentId) =>
     (await getAll(account(name), `/courses/${courseId}/assignments/${assignmentId}/submissions?include[]=user`))
       .filter(s => s.submitted_at && s.workflow_state !== 'unsubmitted')

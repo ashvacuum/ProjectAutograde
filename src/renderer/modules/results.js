@@ -840,18 +840,30 @@ export default (Base) => class extends Base {
                 }
             }
 
-            // Fetch submission details for assignment context
+            // Fetch assignment and submission details for context (due date,
+            // late penalty, Canvas rubric)
             let assignmentContext = null;
             try {
-                const submissionResult = await window.electronAPI.canvas.getSubmission(courseId, assignmentId, userId);
-                if (submissionResult.success) {
-                    assignmentContext = {
-                        assignment_id: assignmentId,
-                        user_id: userId,
-                        submitted_at: submissionResult.submission.submitted_at,
-                        due_at: submissionResult.submission.assignment?.due_at
-                    };
-                }
+                const [assignmentsResult, submissionsResult] = await Promise.all([
+                    window.electronAPI.canvas.getAssignments(courseId),
+                    window.electronAPI.canvas.getSubmissions(courseId, assignmentId)
+                ]);
+                const assignment = assignmentsResult.success
+                    ? assignmentsResult.assignments.find(a => a.id == assignmentId)
+                    : null;
+                const submission = submissionsResult.success
+                    ? submissionsResult.submissions.find(s => s.user_id == userId)
+                    : null;
+                assignmentContext = {
+                    assignment_id: assignmentId,
+                    user_id: userId,
+                    name: assignment?.name || '',
+                    description: assignment?.description || '',
+                    points_possible: assignment?.points_possible || null,
+                    submitted_at: submission?.submitted_at || null,
+                    due_at: assignment?.due_at || null,
+                    rubric: assignment?.rubric || null
+                };
             } catch (error) {
                 console.warn('Could not fetch submission details:', error);
             }

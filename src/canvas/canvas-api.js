@@ -76,6 +76,31 @@ class CanvasAPI {
   }
 
   /**
+   * Convert a Canvas assignment rubric (assignment.rubric) into the grader's
+   * criteria shape: { name, totalPoints, items: [{ id, name, description,
+   * points, ratings: [{ name, points, description }] }] }.
+   */
+  static rubricToCriteria(rubric, name = 'Canvas Rubric') {
+    const items = rubric.map(c => ({
+      id: c.id,
+      name: c.description,
+      description: c.long_description || c.description,
+      points: c.points,
+      ratings: (c.ratings || []).map(r => ({
+        name: r.description,
+        points: r.points,
+        description: r.long_description || r.description
+      }))
+    }));
+    return {
+      name,
+      description: 'Rubric attached to this assignment in Canvas.',
+      totalPoints: items.reduce((sum, item) => sum + (item.points || 0), 0),
+      items
+    };
+  }
+
+  /**
    * True when either of the assignment's dates (available-from or due) falls
    * inside the course's active period. Undated assignments pass; the
    * has-submissions filter handles those.
