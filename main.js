@@ -407,10 +407,11 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
 
       return {
         success: true,
-        analysis: analysis,
+        // The source went into the prompt; it isn't needed in the window or saved results
+        analysis: { ...analysis, sourceFiles: undefined },
         grade: finalGrade,
         latePenalty: latePenaltyInfo,
-        needsInstructorIntervention: analysis.needsInstructorIntervention || false,
+        needsInstructorIntervention: analysis.needsInstructorIntervention || !!finalGrade?.needsInstructorReview,
         interventionReason: analysis.interventionReason || null,
         errorType: analysis.errorType || null
       };

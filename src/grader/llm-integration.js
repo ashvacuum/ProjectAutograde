@@ -508,23 +508,27 @@ ${assignmentDetails.description || 'Standard Unity math programming assignment f
     console.log('🚀 CALLING CLAUDE CLI');
     console.log('========================================');
     try {
-      const content = await this.claudeCLI.analyze(prompt);
-      console.log(`✅ Claude CLI returned ${content.length} characters`);
+      const { text: content, usage } = await this.claudeCLI.analyze(prompt);
+      console.log(`✅ Claude CLI returned ${content.length} characters (≈$${usage.costUSD.toFixed(4)} at API prices)`);
       console.log('========================================\n');
       try {
-        return this.parseResponse(content);
+        return { ...this.parseResponse(content), usage };
       } catch (parseError) {
-        console.warn('Failed to parse CLI output as JSON, returning raw response');
+        // No score could be read: flag for the instructor instead of inventing one
+        console.warn('Failed to parse CLI output as JSON, flagging for review');
         return {
-          overallGrade: 75,
+          overallGrade: 0,
           maxPoints: 100,
           criteriaScores: {},
           overallFeedback: {
-            strengths: ['Code analysis completed'],
-            improvements: ['Review suggestions in raw output'],
+            strengths: [],
+            improvements: ['The grader reply could not be read; grade this submission manually'],
             detailedFeedback: content.substring(0, 1000)
           },
-          rawOutput: content
+          needsInstructorReview: true,
+          gradingNotes: 'Unparseable grader reply; see rawOutput.',
+          rawOutput: content,
+          usage
         };
       }
     } catch (error) {

@@ -104,8 +104,8 @@ class ClaudeCLIIntegration {
    */
   async verify() {
     try {
-      const reply = await this.analyze('Reply with exactly: ok');
-      return { ok: true, reply: reply.slice(0, 40) };
+      const { text, usage } = await this.analyze('Reply with exactly: ok');
+      return { ok: true, reply: text.slice(0, 40), usage };
     } catch (error) {
       return { ok: false, error: error.message };
     }
@@ -116,8 +116,11 @@ class ClaudeCLIIntegration {
   }
 
   /**
-   * Send a grading prompt through the CLI in non-interactive print mode and
-   * return the raw text response. Throws on non-zero exit.
+   * Send a grading prompt through the CLI in non-interactive print mode.
+   * Returns { text, usage }, where usage is what the CLI reports for the
+   * call: tokens, duration and costUSD. On a subscription costUSD is the
+   * API-price equivalent, not a charge; plan limits count the tokens.
+   * Throws on failure.
    */
   async analyze(prompt) {
     const detection = await this.detect();
@@ -128,24 +131,45 @@ class ClaudeCLIIntegration {
     // --tools "" disables every built-in tool: the prompt already holds the
     // rubric, folder tree and source, so the model only reads and scores.
     // Without this it tries gh/WebFetch to look at the repo itself.
-    const args = ['-p', '--model', 'claude-haiku-5-5', '--output-format', 'text', '--tools', '""'];
+    // JSON output carries the reply plus usage stats.
+    const model = 'claude-haiku-5-5';
+    const args = ['-p', '--model', model, '--output-format', 'json', '--tools', '""'];
 
     const result = await this._run(args, prompt, 300000);
 
-    if (result.code !== 0) {
-      const output = `${result.stderr}\n${result.stdout}`;
+    let json = null;
+    try {
+      json = JSON.parse(result.stdout);
+    } catch {}
+
+    const failed = result.code !== 0 || !json || json.is_error;
+    if (failed) {
+      const output = `${result.stderr}\n${json?.result || result.stdout}`;
       if (/401|failed to authenticate|oauth|not logged in|invalid api key/i.test(output)) {
         throw new Error('Claude CLI login has expired or is invalid. Open a terminal and run: claude auth login');
       }
-      const message = result.stderr || result.stdout || `Claude CLI exited with code ${result.code}`;
+      const message = result.stderr || json?.result || result.stdout || `Claude CLI exited with code ${result.code}`;
       throw new Error(`Claude CLI error: ${message}`);
     }
 
-    if (!result.stdout) {
+    if (!json.result) {
       throw new Error('Claude CLI returned an empty response');
     }
 
-    return result.stdout;
+    const u = json.usage || {};
+    return {
+      text: json.result,
+      usage: {
+        source: 'claude-cli',
+        model,
+        costUSD: json.total_cost_usd || 0,
+        inputTokens: u.input_tokens || 0,
+        outputTokens: u.output_tokens || 0,
+        cacheReadTokens: u.cache_read_input_tokens || 0,
+        cacheWriteTokens: u.cache_creation_input_tokens || 0,
+        durationMs: json.duration_ms || 0
+      }
+    };
   }
 }
 

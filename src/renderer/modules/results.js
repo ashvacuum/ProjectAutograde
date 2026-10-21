@@ -72,9 +72,11 @@ export default (Base) => class extends Base {
         const gradedCount = this.gradingResults.filter(r => !r.needsInstructorIntervention).length;
         const reviewCount = this.gradingResults.filter(r => r.needsInstructorIntervention).length;
 
+        const usageTotal = this.sumUsage(this.gradingResults.map(r => (r.grade?.result || r.grade)?.usage));
         summaryDiv.innerHTML = `
             Total: ${totalCount} | Graded: ${gradedCount} | Needs Review: ${reviewCount} |
             Showing: ${filteredResults.length} result(s)
+            ${usageTotal.grades ? `<div style="margin-top: 4px; opacity: 0.8; font-size: 13px;" title="On a Claude subscription this isn't charged; plan limits count the tokens.">Claude CLI usage: ${this.formatUsage(usageTotal)}</div>` : ''}
         `;
 
         // Show review panel if there are items needing review
@@ -437,6 +439,13 @@ export default (Base) => class extends Base {
                 <h3 style="margin: 24px 0 8px 0; font-size: 18px;">Canvas Comment</h3>
                 <pre style="white-space: pre-wrap; font-family: inherit; margin: 0;">${esc(this.buildCanvasFeedback(grade))}</pre>
             `;
+            if (grade.usage) {
+                detailsHtml += `
+                    <h3 style="margin: 24px 0 8px 0; font-size: 18px;">Grader Usage</h3>
+                    <p style="margin: 0;">${esc(grade.usage.model || 'Claude CLI')}: ${esc(this.formatUsage(this.sumUsage([grade.usage])))}</p>
+                    <p style="margin: 4px 0 0 0; opacity: 0.7; font-size: 13px;">On a Claude subscription this isn't charged; your plan's usage limits count the tokens.</p>
+                `;
+            }
             if (grade.authorship) {
                 const reasons = (grade.authorship.reasons || []).map(r => `<li>${esc(r)}</li>`).join('');
                 detailsHtml += `
@@ -838,7 +847,9 @@ export default (Base) => class extends Base {
         }
 
         const stillFailing = indexes.filter(i => this.gradingResults[i].needsInstructorIntervention).length;
-        this.showToast(`Regrade finished: ${indexes.length - stillFailing} fixed, ${stillFailing} still need review`, stillFailing ? 'warning' : 'success');
+        const usage = this.sumUsage(indexes.map(i => (this.gradingResults[i].grade?.result || this.gradingResults[i].grade)?.usage));
+        this.showToast(`Regrade finished: ${indexes.length - stillFailing} fixed, ${stillFailing} still need review` +
+            (usage.grades ? `. Claude CLI usage: ${this.formatUsage(usage)}` : ''), stillFailing ? 'warning' : 'success');
     }
 
     async regradeSubmission(index, { skipConfirm = false } = {}) {
@@ -979,6 +990,32 @@ export default (Base) => class extends Base {
             console.error('❌ Regrade exception:', error);
             this.showToast(`Error during regrade: ${error.message}`, 'error');
         }
+    }
+
+    // Total the grader usage records ({ costUSD, inputTokens, ... } from the
+    // Claude CLI) across a list of them; missing entries are skipped.
+    sumUsage(usages) {
+        const total = { grades: 0, costUSD: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, durationMs: 0 };
+        for (const u of usages) {
+            if (!u) continue;
+            total.grades++;
+            for (const key of Object.keys(total)) {
+                if (key !== 'grades') total[key] += u[key] || 0;
+            }
+        }
+        return total;
+    }
+
+    // e.g. "3 grades · 41,200 tokens · 1m 32s · ≈$0.31 at API prices"
+    formatUsage(total) {
+        if (!total.grades) return 'No CLI usage recorded';
+        const tokens = total.inputTokens + total.outputTokens + total.cacheReadTokens + total.cacheWriteTokens;
+        const secs = Math.round(total.durationMs / 1000);
+        const time = secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs}s`;
+        return `${total.grades} grade${total.grades === 1 ? '' : 's'} · ${tokens.toLocaleString()} tokens ` +
+            `(${total.inputTokens.toLocaleString()} in, ${total.outputTokens.toLocaleString()} out, ` +
+            `${(total.cacheReadTokens + total.cacheWriteTokens).toLocaleString()} cached) · ${time} · ` +
+            `≈$${total.costUSD.toFixed(2)} at API prices`;
     }
 
     // The comment posted to Canvas: the score and a short note on only the

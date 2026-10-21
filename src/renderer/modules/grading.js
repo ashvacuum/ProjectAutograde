@@ -917,6 +917,7 @@ export default (Base) => class extends Base {
             // Process submissions (filtered or all)
             this.gradingResults = [];
 
+            const batchUsage = []; // grader usage per submission, totalled when the batch ends
             for (let i = 0; i < submissionsToGrade.length; i++) {
                 const submission = submissionsToGrade[i];
                 const progress = ((i + 1) / submissionsToGrade.length) * 100;
@@ -1017,6 +1018,7 @@ export default (Base) => class extends Base {
                         const duration = ((Date.now() - startTime) / 1000).toFixed(2);
                         console.log(`✅ Analysis completed in ${duration}s`);
                         console.log('Result:', result);
+                        batchUsage.push((result.grade?.result || result.grade)?.usage);
 
                         if (result.success) {
                             console.log('Grade extracted:', result.grade);
@@ -1145,6 +1147,12 @@ export default (Base) => class extends Base {
                 } else {
                     console.log(`⏭️  Skipping submission ${i + 1} - no GitHub URL`);
                 }
+            }
+
+            // What this batch used on the Claude CLI
+            const batchUsageTotal = this.sumUsage(batchUsage);
+            if (batchUsageTotal.grades) {
+                this.showToast(`Claude CLI usage for this batch: ${this.formatUsage(batchUsageTotal)}`, 'info');
             }
 
             // Count successful and failed gradings
