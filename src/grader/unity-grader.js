@@ -10,7 +10,11 @@ class UnityGrader {
     this.gitCommands = new GitCommands();
   }
 
-  async analyzeProject(repoUrl, criteria) {
+  async analyzeProject(submittedUrl, criteria) {
+    // Branch links (/tree/<branch>) clone that branch from the base repo
+    const { repoUrl, branch } = await this.gitCommands.resolveRepoRef(submittedUrl);
+    if (branch) console.log(`🌿 Submission links branch "${branch}"`);
+
     // First, validate the repository URL and check if it exists
     if (!this.gitCommands.isValidGitHubUrl(repoUrl)) {
       return this.createFailedAnalysis(repoUrl, 'Invalid GitHub URL format', 0, true, 'invalid_url');
@@ -47,7 +51,7 @@ class UnityGrader {
       console.log('✅ Repository is accessible, proceeding with clone...');
 
       // Clone the repository using git commands
-      const cloneResult = await this.gitCommands.cloneRepository(repoUrl);
+      const cloneResult = await this.gitCommands.cloneRepository(repoUrl, { branch });
       if (!cloneResult.success) {
         return this.createFailedAnalysis(repoUrl, 'Failed to clone repository', 0, true, 'clone_failed');
       }
@@ -130,6 +134,7 @@ class UnityGrader {
 
       const analysis = {
         repoUrl,
+        branch,
         projectPath: cloneResult.path,
         structure: projectStructure,
         codeFiles: csharpFiles,

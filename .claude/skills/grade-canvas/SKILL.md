@@ -15,7 +15,7 @@ Helper: `node .claude/skills/grade-canvas/canvas.mjs <command>` (prints JSON):
 | `courses <acct> [all]` | Courses you teach in the current term (id, name, term); `all` includes past and future terms |
 | `assignments <acct> <course> [all]` | This term's assignments that have submissions, sorted by available date (id, name, unlock/due dates, points, description); `all` lists everything |
 | `rubric <acct> <course> <assignment>` | The rubric attached in Canvas (criteria with points and rating levels), or `null` |
-| `submissions <acct> <course> <assignment>` | Submitted work: user_id, name, late/days_late, score, graded, github_url |
+| `submissions <acct> <course> <assignment>` | Submitted work: user_id, name, late/days_late, score, graded, github_url, branch (when the link names one) |
 | `grade <acct> <course> <assignment> <user> <score> [commentFile]` | Posts a score and optional feedback comment |
 
 ## Accounts
@@ -34,7 +34,7 @@ Accounts live in `~/.aralaro/canvas-accounts.json`, outside the repo:
 2. **Pick the rubric.** Use, in order: a rubric the user gives, the Canvas rubric (`rubric`), or the matching template in `src/criteria/default-criteria.json`. When the Canvas rubric is used, score exactly its criteria, its points and its rating levels, and read the assignment description to know what "the requirements" are. It is usually generic (for example "Requirement Completion"). You can't run the game, so score criteria like "Game Execution" from the code (errors, null references, broken logic) and mark them "not run" in the report. Without a Canvas rubric, build criteria from the description, scaled so the total equals `points_possible`.
 3. **List submissions.** Skip ones already `graded` unless the user asks for a regrade. Report any with no `github_url` (show `raw`) instead of guessing.
 4. **Grade each submission.**
-   - `git -c core.longpaths=true clone --depth 1 <github_url> "$TMP/aralaro/<user_id>"` (use the scratchpad when you have one). Without `core.longpaths`, Windows checkouts fail on TextMesh Pro sample paths.
+   - `git -c core.longpaths=true clone --depth 1 [--branch <branch>] <github_url> "$TMP/aralaro/<user_id>"`. Add `--branch` whenever `submissions` returned a `branch`: that's the branch the student linked, and the default branch may hold different (often older) work. (use the scratchpad when you have one). Without `core.longpaths`, Windows checkouts fail on TextMesh Pro sample paths.
    - Find the C# scripts: usually `Assets/**/*.cs`, but also accept non-standard layouts and note them. Skip `Assets/TextMesh Pro/` and other imported packages.
    - Check scene and prefab YAML (`*.unity`, `*.prefab`) for values the code leaves to the Inspector, such as starting HP, speeds, and which objects are children of the camera.
    - Read the actual code. Score each rubric criterion on whether the math is correct and actually used, not on keyword hits. Bands: 90-100% mastery, 80-89% proficient, 70-79% developing, 60-69% beginning, below 60% major gaps.

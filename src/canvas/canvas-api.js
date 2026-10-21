@@ -295,8 +295,11 @@ class CanvasAPI {
         const owner = pathParts[0];
         const repo = pathParts[1];
 
-        // Check if there are additional path segments that should be removed
-        if (pathParts.length > 2) {
+        // Keep branch links (/tree/<branch>, /blob/<branch>/file -> /tree/...)
+        // so the grader clones that branch; see GitCommands.resolveRepoRef.
+        if ((pathParts[2] === 'tree' || pathParts[2] === 'blob') && pathParts.length > 3) {
+          pathname = `/${owner}/${repo}/tree/${pathParts.slice(3).join('/')}`;
+        } else if (pathParts.length > 2) {
           const thirdPart = pathParts[2];
 
           // These are GitHub UI paths that should be removed

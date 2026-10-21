@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const ACCOUNTS_FILE = path.join(os.homedir(), '.aralaro', 'canvas-accounts.json');
 
@@ -71,9 +72,27 @@ function inTerm(assignment, course) {
   return dates.length === 0 || dates.some(d => start <= d && d <= end);
 }
 
-function githubUrl(text) {
-  const m = (text || '').match(/https?:\/\/(?:www\.)?github\.com\/[\w.-]+\/[\w.-]+/i);
-  return m ? m[0].replace(/\.git$/, '') : null;
+// First GitHub link in the text as { url, ref }, where ref is whatever
+// follows /tree/ or /blob/ (branch, maybe plus a folder path).
+function githubLink(text) {
+  const m = (text || '').match(/https?:\/\/(?:www\.)?github\.com\/([\w.-]+\/[\w.-]+?)(?:\.git)?(?:\/(?:tree|blob)\/([^\s?#<>"']+))?(?=[\s?#<>"'/]|$)/i);
+  return m ? { url: `https://github.com/${m[1]}`, ref: m[2] ? decodeURIComponent(m[2]).replace(/[.,;)\/]+$/, '') : null } : null;
+}
+
+// Same rule as GitCommands.resolveRepoRef in the app: the longest prefix of
+// ref that is a real branch; null (default branch) if none matches.
+function resolveBranch(url, ref) {
+  if (!ref) return null;
+  let heads = [];
+  try {
+    heads = execFileSync('git', ['ls-remote', '--heads', url], { encoding: 'utf8', timeout: 30000 })
+      .split('\n').map(line => line.split('refs/heads/')[1]).filter(Boolean);
+  } catch {}
+  const parts = ref.split('/');
+  for (let n = parts.length; n > 0; n--) {
+    if (heads.includes(parts.slice(0, n).join('/'))) return parts.slice(0, n).join('/');
+  }
+  return null;
 }
 
 const commands = {
@@ -120,7 +139,8 @@ const commands = {
     (await getAll(account(name), `/courses/${courseId}/assignments/${assignmentId}/submissions?include[]=user`))
       .filter(s => s.submitted_at && s.workflow_state !== 'unsubmitted')
       .map(s => {
-        const github_url = githubUrl(s.url) || githubUrl(s.body);
+        const link = githubLink(s.url) || githubLink(s.body);
+        const github_url = link?.url || null;
         return {
           user_id: s.user_id,
           name: s.user?.name,
@@ -130,6 +150,8 @@ const commands = {
           score: s.score,
           graded: s.workflow_state === 'graded',
           github_url,
+          // Branch the student linked (/tree/<branch>); null = default branch
+          branch: link?.ref ? resolveBranch(github_url, link.ref) : null,
           // What the student actually submitted, when no GitHub link was found
           raw: github_url ? undefined : (s.url || s.body || null)
         };

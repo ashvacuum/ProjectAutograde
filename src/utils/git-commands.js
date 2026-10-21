@@ -32,6 +32,35 @@ class GitCommands {
     return githubRegex.test(cleanUrl);
   }
 
+  /**
+   * Split a GitHub link into the clonable repo URL and the branch it points
+   * at. "/tree/<rest>" (or "/blob/<rest>") is matched against the repo's real
+   * branches, longest first, since branch names may contain "/" and links may
+   * continue into a folder. Returns branch null for plain repo links, or when
+   * nothing matches (e.g. a commit SHA), so the default branch is used.
+   */
+  async resolveRepoRef(url) {
+    const match = /^(https?:\/\/(?:www\.)?github\.com\/[^/]+\/[^/]+?)(?:\.git)?\/(?:tree|blob)\/(.+?)\/?$/i.exec(url || '');
+    if (!match) return { repoUrl: url, branch: null };
+
+    const [, repoUrl, rest] = match;
+    let heads = [];
+    try {
+      const output = await simpleGit().listRemote(['--heads', repoUrl]);
+      heads = output.split('\n').map(line => line.split('refs/heads/')[1]).filter(Boolean);
+    } catch (error) {
+      console.warn(`Could not list branches for ${repoUrl}: ${error.message}`);
+    }
+
+    const parts = decodeURIComponent(rest).split('/');
+    for (let n = parts.length; n > 0; n--) {
+      const candidate = parts.slice(0, n).join('/');
+      if (heads.includes(candidate)) return { repoUrl, branch: candidate };
+    }
+    console.warn(`No branch matches "${rest}" in ${repoUrl}; using the default branch`);
+    return { repoUrl, branch: null };
+  }
+
   async checkRepositoryExists(repoUrl) {
     if (!this.isValidGitHubUrl(repoUrl)) {
       return { exists: false, error: 'Invalid GitHub URL format' };
@@ -71,7 +100,8 @@ class GitCommands {
     const repoName = this.extractRepoName(repoUrl);
     const projectDir = path.join(this.tempDir, `${repoName}-${Date.now()}`);
 
-    const cloneArgs = ['--depth', '1', '--single-branch'];
+    // core.longpaths: Unity repos (TextMesh Pro samples) exceed Windows' 260-char path limit
+    const cloneArgs = ['--depth', '1', '--single-branch', '--config', 'core.longpaths=true'];
     if (options.branch) {
       cloneArgs.push('--branch', options.branch);
     }

@@ -183,7 +183,8 @@ ${this.formatGradingCriteria(criteria)}
 ## Project Analysis Data
 
 ### Repository Information
-- **Repository URL:** ${projectAnalysis.repoUrl || 'Not provided'}
+- **Repository URL:** ${projectAnalysis.repoUrl || 'Not provided'}${projectAnalysis.branch ? `
+- **Branch:** ${projectAnalysis.branch}` : ''}
 - **Unity Version:** ${projectAnalysis.unityFeatures?.version || 'Unknown'}
 - **Total C# Files:** ${projectAnalysis.codeAnalysis?.totalFiles || 0}
 - **Scene Count:** ${projectAnalysis.unityFeatures?.sceneCount || 0}

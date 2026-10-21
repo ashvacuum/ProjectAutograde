@@ -1721,10 +1721,12 @@ export default (Base) => class extends Base {
                 return { valid: false, reason: 'URL points to a specific GitHub page, repository root URL required' };
             }
 
-            // Handle URLs that include tree/branch references or subdirectories
-            if (pathParts.includes('tree') || pathParts.includes('blob')) {
-                // These are valid but we want to clean them to the root repository URL
-                // URL format: github.com/owner/repo/tree/branch/path or github.com/owner/repo/blob/branch/file
+            // Keep branch links (github.com/owner/repo/tree/branch[/path], or
+            // /blob/branch/file) so the grader clones that branch; the main
+            // process resolves which part is the branch.
+            let branchSuffix = '';
+            if ((pathParts[2] === 'tree' || pathParts[2] === 'blob') && pathParts.length > 3) {
+                branchSuffix = `/tree/${pathParts.slice(3).join('/')}`;
             }
 
             // Check for private repository indicators (this is basic and may not catch all cases)
@@ -1742,7 +1744,7 @@ export default (Base) => class extends Base {
                 valid: true,
                 owner: pathParts[0],
                 repo: repoName,
-                cleanUrl: `https://github.com/${pathParts[0]}/${repoName}`
+                cleanUrl: `https://github.com/${pathParts[0]}/${repoName}${branchSuffix}`
             };
 
         } catch (error) {
