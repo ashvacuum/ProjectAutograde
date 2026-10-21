@@ -41,24 +41,28 @@ class GitCommands {
    */
   async resolveRepoRef(url) {
     const match = /^(https?:\/\/(?:www\.)?github\.com\/[^/]+\/[^/]+?)(?:\.git)?\/(?:tree|blob)\/(.+?)\/?$/i.exec(url || '');
-    if (!match) return { repoUrl: url, branch: null };
+    const repoUrl = match ? match[1] : url;
+    const rest = match ? match[2] : null;
 
-    const [, repoUrl, rest] = match;
-    let heads = [];
+    // All branch names, also for plain links, so the grader can pick the
+    // branch named for the assignment when the link didn't name one
+    let branches = [];
     try {
       const output = await simpleGit().listRemote(['--heads', repoUrl]);
-      heads = output.split('\n').map(line => line.split('refs/heads/')[1]).filter(Boolean);
+      branches = output.split('\n').map(line => line.split('refs/heads/')[1]).filter(Boolean);
     } catch (error) {
       console.warn(`Could not list branches for ${repoUrl}: ${error.message}`);
     }
 
+    if (!rest) return { repoUrl, branch: null, branches };
+
     const parts = decodeURIComponent(rest).split('/');
     for (let n = parts.length; n > 0; n--) {
       const candidate = parts.slice(0, n).join('/');
-      if (heads.includes(candidate)) return { repoUrl, branch: candidate };
+      if (branches.includes(candidate)) return { repoUrl, branch: candidate, branches };
     }
     console.warn(`No branch matches "${rest}" in ${repoUrl}; using the default branch`);
-    return { repoUrl, branch: null };
+    return { repoUrl, branch: null, branches };
   }
 
   async checkRepositoryExists(repoUrl) {

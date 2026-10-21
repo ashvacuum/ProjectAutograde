@@ -8,6 +8,7 @@ require('dotenv').config();
 // Import our custom modules
 const CanvasAuth = require('./src/canvas/canvas-auth');
 const CanvasAPI = require('./src/canvas/canvas-api');
+const ClaudeCLIIntegration = require('./src/grader/claude-cli-integration');
 const UnityGrader = require('./src/grader/unity-grader');
 const LLMIntegration = require('./src/grader/llm-integration');
 const CriteriaManager = require('./src/criteria/criteria-manager');
@@ -247,7 +248,9 @@ ipcMain.handle('canvas-post-grade', async (event, courseId, assignmentId, userId
 });
 
 // Unity Grader IPC Handlers
-ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assignmentDetails = null) => {
+ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assignmentDetails = null, options = {}) => {
+  // Optional per-grade model (e.g. Sonnet for a regrade); unknown values fall back to the default
+  const model = ClaudeCLIIntegration.MODELS.includes(options?.model) ? options.model : undefined;
   const startTime = Date.now();
   console.log('\n========================================');
   console.log('🎓 GRADING REQUEST RECEIVED');
@@ -302,7 +305,7 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
     });
 
     console.log('📂 Step 1/3: Cloning and analyzing Unity project...');
-    analysis = await unityGrader.analyzeProject(repoUrl, cleanCriteria);
+    analysis = await unityGrader.analyzeProject(repoUrl, cleanCriteria, cleanAssignmentDetails);
     console.log('✅ Unity project analysis complete');
     console.log('   - Files found:', analysis.codeFiles?.length || 0);
     console.log('   - Valid Unity project:', analysis.success);
@@ -324,7 +327,7 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
 
       let gradingResult;
       try {
-        gradingResult = await llmIntegration.analyzeUnityProject(analysis, cleanCriteria, cleanAssignmentDetails);
+        gradingResult = await llmIntegration.analyzeUnityProject(analysis, cleanCriteria, cleanAssignmentDetails, { model });
       } catch (llmError) {
         console.error('❌ LLM grading failed:', llmError.message);
         console.error('   Provider:', llmError.provider || 'unknown');

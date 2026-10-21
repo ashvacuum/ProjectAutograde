@@ -96,7 +96,8 @@ export default (Base) => class extends Base {
                     <h4 style="margin: 0 0 8px 0; color: #f1c40f;">⚠️ Instructor Intervention Required</h4>
                     <p style="margin: 0;">${reviewCount} submission(s) require manual review.
                     <button class="btn btn-secondary" onclick="filterResults('review')" style="margin-left: 8px;">View Review Queue</button>
-                    <button class="btn" onclick="app.regradeAllNeedingReview()" style="margin-left: 8px;">Regrade all needing review (${reviewCount})</button></p>
+                    <button class="btn" onclick="app.regradeAllNeedingReview()" style="margin-left: 8px;">Regrade all needing review (${reviewCount})</button>
+                    <button class="btn btn-secondary" onclick="app.regradeAllNeedingReview('claude-sonnet-5-5')" style="margin-left: 8px;" title="More careful than Haiku; uses more of your plan's usage">...with Sonnet 5.5</button></p>
                 </div>
             `;
         }
@@ -465,6 +466,7 @@ export default (Base) => class extends Base {
                               style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: inherit; resize: vertical;">${esc(override ? override.comment : this.aiCommentBody(grade))}</textarea>
                     <div style="display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;">
                         <button class="btn" onclick="app.saveAdjustment(${index})">Save adjustment</button>
+                        <button class="btn btn-secondary" onclick="app.regradeSubmission(${index}, { model: 'claude-sonnet-5-5' })" title="More careful than Haiku; uses more of your plan's usage">Regrade with Sonnet 5.5</button>
                         ${override ? `<button class="btn btn-secondary" onclick="app.resetAdjustment(${index})">Reset to AI score and comment</button>` : ''}
                     </div>
                 </div>
@@ -854,7 +856,7 @@ export default (Base) => class extends Base {
 
     // Regrade every result marked "Needs Review" that has a GitHub URL, one
     // at a time (each clones a repo and runs a grade), after one confirmation.
-    async regradeAllNeedingReview() {
+    async regradeAllNeedingReview(model = null) {
         const indexes = this.gradingResults
             .map((r, i) => (r.needsInstructorIntervention && r.githubUrl ? i : -1))
             .filter(i => i >= 0);
@@ -863,13 +865,14 @@ export default (Base) => class extends Base {
             this.showToast('No submissions needing review have a GitHub URL to regrade', 'warning');
             return;
         }
-        if (!confirm(`Regrade ${indexes.length} submission(s) that need review?\n\nEach one re-clones the repository and is graded again.`)) {
+        const modelName = model === 'claude-sonnet-5-5' ? 'Sonnet 5.5' : 'Haiku 5.5';
+        if (!confirm(`Regrade ${indexes.length} submission(s) that need review with ${modelName}?\n\nEach one re-clones the repository and is graded again.`)) {
             return;
         }
 
         for (let n = 0; n < indexes.length; n++) {
             this.showToast(`Regrading ${n + 1} of ${indexes.length}...`, 'info');
-            await this.regradeSubmission(indexes[n], { skipConfirm: true });
+            await this.regradeSubmission(indexes[n], { skipConfirm: true, model });
         }
 
         const stillFailing = indexes.filter(i => this.gradingResults[i].needsInstructorIntervention).length;
@@ -878,7 +881,8 @@ export default (Base) => class extends Base {
             (usage.grades ? `. Claude CLI usage: ${this.formatUsage(usage)}` : ''), stillFailing ? 'warning' : 'success');
     }
 
-    async regradeSubmission(index, { skipConfirm = false } = {}) {
+    // model: optional CLI model for this regrade, e.g. 'claude-sonnet-5-5'
+    async regradeSubmission(index, { skipConfirm = false, model = null } = {}) {
         const result = this.gradingResults[index];
 
         if (!result) {
@@ -898,7 +902,8 @@ export default (Base) => class extends Base {
         console.log('GitHub URL:', result.githubUrl);
         console.log('Previous Status:', result.needsInstructorIntervention ? 'Needs Review' : 'Graded');
 
-        const confirmRegrade = skipConfirm || confirm(`Regrade submission for ${result.studentName}?\n\nThis will re-analyze the repository and update the grade.`);
+        const modelName = model === 'claude-sonnet-5-5' ? 'Sonnet 5.5' : 'Haiku 5.5';
+        const confirmRegrade = skipConfirm || confirm(`Regrade submission for ${result.studentName} with ${modelName}?\n\nThis will re-analyze the repository and update the grade.`);
 
         if (!confirmRegrade) {
             console.log('❌ Regrade cancelled by user');
@@ -965,7 +970,8 @@ export default (Base) => class extends Base {
             const regradeResult = await window.electronAPI.grader.analyzeProject(
                 result.githubUrl,
                 criteria,
-                assignmentContext
+                assignmentContext,
+                model ? { model } : {}
             );
 
             console.log('📥 Regrade result received:', regradeResult.success);

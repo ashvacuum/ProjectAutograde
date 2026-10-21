@@ -5,6 +5,30 @@ const GitCommands = require('../utils/git-commands');
 // Folders of imported packages, not student work
 const VENDOR_DIR = /^(TextMesh Pro|TextMeshPro|Packages|Plugins|ThirdParty)$/i;
 
+// Students often keep every activity in one repo ("Activity 4/", branch
+// "activity-4", "Week5Scripts"). These read the numbers off names like that.
+const NUMBERED = /(?:week|wk|activity|acitivty|actvity|act|lab|exercise)[\s_\-#:.]*0*(\d+)(?!\d)/gi;
+
+// Numbers an assignment name refers to: "Week 4 Assignment" -> [4]
+function assignmentNumbers(name) {
+  return [...new Set([...String(name || '').matchAll(NUMBERED)].map(m => Number(m[1])))];
+}
+
+// Numbers a path or branch name refers to: "Assets/Activity 4/Pathing.cs" -> [4]
+function referencedNumbers(text) {
+  return [...String(text || '').matchAll(NUMBERED)].map(m => Number(m[1]));
+}
+
+// Distinctive words from the assignment text, for matching code to it
+function assignmentKeywords(assignment) {
+  const text = `${assignment?.name || ''} ${assignment?.description || ''}`
+    .replace(/<[^>]+>/g, ' ').replace(/&\w+;/g, ' ').toLowerCase();
+  const stop = new Set(['should', 'which', 'their', 'there', 'these', 'those', 'about', 'every', 'after', 'before',
+    'while', 'where', 'would', 'could', 'using', 'other', 'player', 'assignment', 'activity', 'create', 'make', 'video',
+    'github', 'repository', 'readme', 'submit', 'link', 'google', 'drive']);
+  return [...new Set(text.match(/[a-z]{5,}/g) || [])].filter(w => !stop.has(w));
+}
+
 class UnityGrader {
   constructor() {
     this.tempDir = path.join(__dirname, '../../temp');
@@ -13,10 +37,24 @@ class UnityGrader {
     this.gitCommands = new GitCommands();
   }
 
-  async analyzeProject(submittedUrl, criteria) {
+  async analyzeProject(submittedUrl, criteria, assignment = null) {
     // Branch links (/tree/<branch>) clone that branch from the base repo
-    const { repoUrl, branch } = await this.gitCommands.resolveRepoRef(submittedUrl);
+    const { repoUrl, branch: linkedBranch, branches } = await this.gitCommands.resolveRepoRef(submittedUrl);
+    let branch = linkedBranch;
+    let branchNote = null;
     if (branch) console.log(`🌿 Submission links branch "${branch}"`);
+
+    // A plain link lands on the default branch. If exactly one branch is
+    // named for this assignment ("activity-4" for "Week 4 ..."), grade that.
+    const numbers = assignmentNumbers(assignment?.name);
+    if (!branch && numbers.length) {
+      const named = branches.filter(b => referencedNumbers(b).some(n => numbers.includes(n)));
+      if (named.length === 1) {
+        branch = named[0];
+        branchNote = `The submitted link points at the default branch, but the repository has a branch "${branch}" named for this assignment, so that branch was graded.`;
+        console.log(`🌿 ${branchNote}`);
+      }
+    }
 
     // First, validate the repository URL and check if it exists
     if (!this.gitCommands.isValidGitHubUrl(repoUrl)) {
@@ -152,8 +190,10 @@ class UnityGrader {
       // Everything the grader model needs goes into the prompt: it grades
       // only from what it's given.
       analysis.folderTree = await this.buildFolderTree(cloneResult.path);
-      analysis.sourceFiles = await this.collectSourceFiles(cloneResult.path, csharpFiles);
+      analysis.sourceFiles = await this.collectSourceFiles(cloneResult.path, csharpFiles, undefined, assignment);
       analysis.readme = await this.readReadme(cloneResult.path);
+      analysis.branches = branches;
+      analysis.branchNote = branchNote;
       analysis.authorshipSignals = this.countAuthorshipSignals(analysis.sourceFiles.files);
 
       this.analysisResults[repoUrl] = analysis;
@@ -738,28 +778,45 @@ class UnityGrader {
    * with paths relative to the repo root. Imported packages are left out,
    * and the total is capped (~30k tokens); overflow is listed in skipped.
    */
-  async collectSourceFiles(root, csharpFiles, maxChars = 120000) {
-    const files = [];
-    const skipped = [];
-    let used = 0;
+  async collectSourceFiles(root, csharpFiles, maxChars = 160000, assignment = null) {
+    const numbers = assignmentNumbers(assignment?.name);
+    const keywords = assignmentKeywords(assignment);
 
+    // Read every student file, then rank by how likely it is to belong to
+    // this assignment, so a repo holding several activities sends this
+    // one's code first instead of whatever comes first on disk.
+    const candidates = [];
+    const skipped = [];
     for (const filePath of csharpFiles) {
       const rel = path.relative(root, filePath);
       if (rel.split(/[\\/]/).some(part => VENDOR_DIR.test(part))) continue;
-
-      let content;
       try {
-        content = await fs.readFile(filePath, 'utf-8');
+        candidates.push({ path: rel, content: await fs.readFile(filePath, 'utf-8') });
       } catch {
         skipped.push(rel);
+      }
+    }
+
+    for (const file of candidates) {
+      const refs = referencedNumbers(file.path);
+      const matchesThis = numbers.length > 0 && refs.some(n => numbers.includes(n));
+      // Path names another activity/week and not this one
+      file.otherAssignment = numbers.length > 0 && refs.length > 0 && !matchesThis;
+      const lower = file.content.toLowerCase();
+      const keywordHits = keywords.filter(k => lower.includes(k)).length;
+      file.relevance = (matchesThis ? 10 : 0) - (file.otherAssignment ? 10 : 0) + Math.min(keywordHits, 8);
+    }
+    candidates.sort((a, b) => b.relevance - a.relevance);
+
+    const files = [];
+    let used = 0;
+    for (const file of candidates) {
+      if (used + file.content.length > maxChars) {
+        skipped.push(file.path);
         continue;
       }
-      if (used + content.length > maxChars) {
-        skipped.push(rel);
-        continue;
-      }
-      used += content.length;
-      files.push({ path: rel, content });
+      used += file.content.length;
+      files.push({ path: file.path, content: file.content, otherAssignment: file.otherAssignment });
     }
 
     return { files, skipped };
@@ -807,10 +864,46 @@ class UnityGrader {
       const name = (await fs.readdir(root)).find(f => /^readme(\.md|\.txt)?$/i.test(f));
       if (!name) return null;
       const text = await fs.readFile(path.join(root, name), 'utf-8');
-      return { name, text: text.length > maxChars ? text.slice(0, maxChars) + '\n... (truncated)' : text };
+      return {
+        name,
+        text: text.length > maxChars ? text.slice(0, maxChars) + '\n... (truncated)' : text,
+        links: this.extractReadmeLinks(text)
+      };
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Every link in a README as { url, label }, cleaned of markdown: escapes
+   * like "\_" (Drive IDs break on those), trailing <br> and punctuation.
+   * label is the link text, the text before the URL on its line, or the
+   * nearest heading above it ("Week 5"), which tells which video is which.
+   */
+  extractReadmeLinks(markdown) {
+    const links = [];
+    const seen = new Set();
+    let heading = '';
+    for (const rawLine of String(markdown).split(/\r?\n/)) {
+      const line = rawLine.replace(/\\([\\`*_{}[\]()#+\-.!|~])/g, '$1');
+      const h = /^\s*#{1,6}\s+(.*)$/.exec(line);
+      if (h) heading = h[1].replace(/https?:\/\/\S+/g, '').replace(/[-:|\s]+$/, '').trim();
+
+      // [label](url), <a href="url">label</a>, then bare URLs
+      const found = [];
+      for (const m of line.matchAll(/\[([^\]]*)\]\(\s*<?(https?:\/\/[^)\s>]+)>?[^)]*\)/g)) found.push({ url: m[2], label: m[1] });
+      for (const m of line.matchAll(/<a\s[^>]*href=["'](https?:\/\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) found.push({ url: m[1], label: m[2].replace(/<[^>]+>/g, '') });
+      for (const m of line.matchAll(/https?:\/\/[^\s<>()[\]"'`]+/g)) found.push({ url: m[0], label: '' });
+
+      for (const { url: rawUrl, label } of found) {
+        const url = rawUrl.replace(/(<br\s*\/?>)+$/i, '').replace(/[.,;:!?*_~`'"]+$/, '');
+        if (seen.has(url)) continue;
+        seen.add(url);
+        const before = line.slice(0, line.indexOf(rawUrl)).replace(/<[^>]+>|[#*>\-[\]()`_~]/g, ' ').replace(/\s+/g, ' ').trim();
+        links.push({ url, label: (label || before || heading).slice(0, 80) });
+      }
+    }
+    return links.slice(0, 30);
   }
 
   getAnalysisResult(repoUrl) {

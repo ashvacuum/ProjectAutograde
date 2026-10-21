@@ -74,7 +74,7 @@ class LLMIntegration {
     }
   }
 
-  async analyzeUnityProject(projectAnalysis, gradingCriteria, assignmentDetails = null) {
+  async analyzeUnityProject(projectAnalysis, gradingCriteria, assignmentDetails = null, options = {}) {
     console.log('\n========================================');
     console.log('📊 ANALYZING UNITY PROJECT');
     console.log('========================================');
@@ -130,7 +130,7 @@ class LLMIntegration {
         provider: this.mode === 'cli' ? 'claude-cli' : this.activeProvider.provider
       });
 
-      const result = await this.executeLLMAnalysis(prompt, projectAnalysis);
+      const result = await this.executeLLMAnalysis(prompt, projectAnalysis, options);
 
       this.activeAnalyses.set(analysisId, {
         status: 'completed',
@@ -235,12 +235,13 @@ ${this.buildCodeFilesSummary(projectAnalysis.codeAnalysis?.files || [])}
 4. **Implementation Completeness:** Check if all assignment requirements are met
 5. **Performance Considerations:** Evaluate efficiency and optimization
 
-### Scoring Approach
-- **Excellent (90-100%):** Exceeds expectations, demonstrates mastery
-- **Proficient (80-89%):** Meets all requirements with good understanding
-- **Developing (70-79%):** Meets most requirements but shows areas for improvement
-- **Beginning (60-69%):** Basic implementation with significant gaps
-- **Insufficient (0-59%):** Major issues or missing core requirements
+### Scoring Approach (calibrated for first- and second-year students)
+These are junior game programming students, not professionals. Grade against what the assignment asks for at their level, not against production-quality code.
+- **A working submission that meets the requirements scores 85-100%.** Reserve deductions for real gaps, not style preferences or "could be better" ideas.
+- **Rubric rating levels:** give each criterion its top level unless there is a clear, meaningful shortfall against that criterion (a missing requirement, a real bug, code that is genuinely hard to follow). Minor imperfections keep the top level; mention them in feedback instead of deducting.
+- **Game execution / "does it run" criteria:** you can't run the game. Assume it runs as written unless the code shows a concrete bug (a null reference, broken logic, a missing required piece). Never deduct just because you couldn't run or verify it. A demo video linked in the README is supporting evidence that it works.
+- **Partial work:** missing one requirement out of several is a modest deduction on the criterion it belongs to, not a collapse of the whole score.
+- **Rough bands:** 85-100% meets the requirements, 70-84% most requirements with a notable gap, 50-69% significant parts missing, below 50% little of the assignment done.
 
 ### Feedback Requirements
 - Provide specific, actionable feedback
@@ -289,7 +290,7 @@ ${this.buildExampleCriteriaScores(criteria)}
   },
   "needsInstructorReview": false,
   "gradingNotes": "Notes about the grading process, any concerns, or highlights for instructor review",
-  "canvasComment": "The comment posted to the student. 1-3 short, plain sentences, at most 300 characters. Only the most significant points: the biggest problem that cost points, and how to fix it. Skip praise filler and minor nitpicks. No headings, bullets or score breakdown.",
+  "canvasComment": "The comment posted to the student. 1-3 short, plain sentences, at most 300 characters. Only the most significant points: if points were lost, the main reason and how to fix it; if not, one line on what was done well. Skip praise filler and minor nitpicks. No headings, bullets or score breakdown.",
   "authorship": {
     "suspicion": "none | low | medium | high",
     "reasons": ["Short reasons with file names, e.g. 'XML /// <summary> docs on every method in Pathing.cs'"]
@@ -305,7 +306,7 @@ These are first- and second-year game programming students. Judge whether the co
 2. Each criterion score MUST NOT exceed its individual maxScore
 3. Use the exact criterion IDs from the rubric as keys in criteriaScores
 4. Provide detailed, evidence-based feedback for each criterion
-5. Be fair but thorough in your assessment
+5. Be fair and generous with credit for work that is done; follow the calibrated scoring approach above
 6. Set "needsInstructorReview" to true only when you can't grade the submission reliably from what's here (for example, the code doesn't match the assignment at all, or the repository is essentially empty). When you set it, "gradingNotes" must say in one sentence exactly why. Missing demo videos, low scores and authorship suspicion are not reasons on their own.
 
 ## Important Reminders
@@ -456,12 +457,12 @@ ${assignmentDetails.description || 'Standard Unity math programming assignment f
     return formatted;
   }
 
-  async executeLLMAnalysis(prompt, projectAnalysis) {
+  async executeLLMAnalysis(prompt, projectAnalysis, options = {}) {
     const fullPrompt = this.buildAnalysisPrompt(prompt, projectAnalysis) +
       this.buildSourceSection(projectAnalysis);
 
     if (this.mode === 'cli') {
-      return await this.callClaudeCLI(fullPrompt);
+      return await this.callClaudeCLI(fullPrompt, options.model);
     }
 
     if (!this.activeProvider) {
@@ -478,21 +479,49 @@ ${assignmentDetails.description || 'Standard Unity math programming assignment f
    */
   buildSourceSection(projectAnalysis) {
     let section = '';
+
+    const branches = projectAnalysis.branches || [];
+    section += `\n\n## Repository Branches\n\nGraded branch: ${projectAnalysis.branch || 'the default branch'}. ` +
+      `All branches: ${branches.length ? branches.join(', ') : 'unknown'}.\n`;
+    if (projectAnalysis.branchNote) section += `${projectAnalysis.branchNote}\n`;
+
     if (projectAnalysis.folderTree) {
       section += `\n\n## Project Folder Structure\n\n\`\`\`\n${projectAnalysis.folderTree}\n\`\`\`\n`;
     }
 
-    section += projectAnalysis.readme
-      ? `\n\n## ${projectAnalysis.readme.name}\n\n\`\`\`markdown\n${projectAnalysis.readme.text}\n\`\`\`\n`
-      : '\n\n## README\n\nThe repository has no README at its root.\n';
+    const readme = projectAnalysis.readme;
+    if (readme) {
+      section += `\n\n## ${readme.name}\n\n\`\`\`markdown\n${readme.text}\n\`\`\`\n`;
+      // Markdown hides or mangles links (escaped "\_", <br>, [text](url));
+      // this is the same README's links, cleaned, with what each is labelled
+      section += '\n### Links found in the README (cleaned)\n';
+      section += readme.links?.length
+        ? readme.links.map(l => `- ${l.label ? `${l.label}: ` : ''}${l.url}`).join('\n') + '\n'
+        : '- No links.\n';
+      section += 'A link to a video on Google Drive, YouTube, Vimeo, Loom or Streamable, or a github.com/user-attachments/assets link (a video uploaded into the README), counts as a demo video. When the README lists videos for several weeks or activities, the one labelled for this assignment is the demo. A Drive folder link also counts.\n';
+    } else {
+      section += '\n\n## README\n\nThe repository has no README at its root.\n';
+    }
 
     const { files = [], skipped = [] } = projectAnalysis.sourceFiles || {};
-    section += '\n\n## Student Source Code\n\nImported packages (e.g. TextMesh Pro) are omitted.\n';
-    for (const file of files) {
+    const forThis = files.filter(f => !f.otherAssignment);
+    const others = files.filter(f => f.otherAssignment);
+
+    section += '\n\n## Student Source Code\n\nImported packages (e.g. TextMesh Pro) are omitted. Files are ordered by how likely they are to belong to this assignment.\n';
+    for (const file of forThis) {
       section += `\n### ${file.path}\n\`\`\`csharp\n${file.content}\n\`\`\`\n`;
     }
+    if (others.length) {
+      section += '\n\n## Other Code In The Repository (folder names point to other weeks or activities)\n\nStudents often keep every activity in one repository. This code most likely belongs to other assignments: use it only if this assignment builds on it, and never deduct for it.\n';
+      for (const file of others) {
+        section += `\n### ${file.path}\n\`\`\`csharp\n${file.content}\n\`\`\`\n`;
+      }
+    }
     if (files.length === 0) section += '\nNo student C# files were found in the repository.\n';
-    if (skipped.length) section += `\nNot included (size limit or unreadable): ${skipped.join(', ')}\n`;
+    if (skipped.length) {
+      section += `\nNot included (size limit or unreadable): ${skipped.join(', ')}. ` +
+        'If code this assignment needs could be in one of these files, do not deduct for it being missing; mention it in gradingNotes instead.\n';
+    }
 
     const signals = projectAnalysis.authorshipSignals || [];
     section += '\n\n## Authorship Signals\n\nCounts of patterns uncommon for junior students, across the student files above (for the authorship check only):\n';
@@ -500,16 +529,16 @@ ${assignmentDetails.description || 'Standard Unity math programming assignment f
       ? signals.map(s => `- ${s.label}: ${s.count} (${s.files.join(', ')})`).join('\n') + '\n'
       : '- None of the tracked patterns appear.\n';
 
-    section += `\n\n## Important\n\nEverything available about this submission is in this message: the rubric, the analysis, the folder structure, the README and the source code. Grade only from it. Do not ask for more information, files or access, and do not try to fetch the repository. If something a criterion needs is missing (for example a demo video), score that criterion on the evidence here and say what was missing in its feedback. Respond with the JSON only.\n`;
+    section += `\n\n## Important\n\nEverything available about this submission is in this message: the rubric, the analysis, the folder structure, the README and the source code. Grade only from it. Do not ask for more information, files or access, and do not try to fetch the repository. Judge the requirements against the code that implements this assignment, wherever in the repository it is; don't deduct because unrelated code (other weeks or activities) is incomplete or differs from this assignment. If something a criterion needs is missing (for example a demo video), score that criterion on the evidence here and say what was missing in its feedback. Respond with the JSON only.\n`;
     return section;
   }
 
-  async callClaudeCLI(prompt) {
+  async callClaudeCLI(prompt, model) {
     console.log('\n========================================');
     console.log('🚀 CALLING CLAUDE CLI');
     console.log('========================================');
     try {
-      const { text: content, usage } = await this.claudeCLI.analyze(prompt);
+      const { text: content, usage } = await this.claudeCLI.analyze(prompt, model);
       console.log(`✅ Claude CLI returned ${content.length} characters (≈$${usage.costUSD.toFixed(4)} at API prices)`);
       console.log('========================================\n');
       try {

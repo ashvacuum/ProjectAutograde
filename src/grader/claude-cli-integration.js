@@ -122,7 +122,7 @@ class ClaudeCLIIntegration {
    * API-price equivalent, not a charge; plan limits count the tokens.
    * Throws on failure.
    */
-  async analyze(prompt) {
+  async analyze(prompt, model = ClaudeCLIIntegration.DEFAULT_MODEL) {
     const detection = await this.detect();
     if (!detection.available) {
       throw new Error(`Claude CLI not available: ${detection.error || 'unknown'}`);
@@ -132,7 +132,6 @@ class ClaudeCLIIntegration {
     // rubric, folder tree and source, so the model only reads and scores.
     // Without this it tries gh/WebFetch to look at the repo itself.
     // JSON output carries the reply plus usage stats.
-    const model = 'claude-haiku-5-5';
     const args = ['-p', '--model', model, '--output-format', 'json', '--tools', '""'];
 
     const result = await this._run(args, prompt, 300000);
@@ -172,5 +171,9 @@ class ClaudeCLIIntegration {
     };
   }
 }
+
+// Haiku grades by default; Sonnet is offered for regrades that need more care
+ClaudeCLIIntegration.DEFAULT_MODEL = 'claude-haiku-5-5';
+ClaudeCLIIntegration.MODELS = ['claude-haiku-5-5', 'claude-sonnet-5-5'];
 
 module.exports = ClaudeCLIIntegration;

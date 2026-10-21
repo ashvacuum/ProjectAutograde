@@ -33,7 +33,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   grader: {
-    analyzeProject: (repoUrl, criteria, assignmentDetails) => ipcRenderer.invoke('grader-analyze-project', repoUrl, criteria, assignmentDetails),
+    analyzeProject: (repoUrl, criteria, assignmentDetails, options) => ipcRenderer.invoke('grader-analyze-project', repoUrl, criteria, assignmentDetails, options),
     getGradingProgress: () => ipcRenderer.invoke('grader-get-progress'),
     cancelGrading: () => ipcRenderer.invoke('grader-cancel')
   },
