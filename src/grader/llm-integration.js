@@ -306,6 +306,7 @@ These are first- and second-year game programming students. Judge whether the co
 3. Use the exact criterion IDs from the rubric as keys in criteriaScores
 4. Provide detailed, evidence-based feedback for each criterion
 5. Be fair but thorough in your assessment
+6. Set "needsInstructorReview" to true only when you can't grade the submission reliably from what's here (for example, the code doesn't match the assignment at all, or the repository is essentially empty). When you set it, "gradingNotes" must say in one sentence exactly why. Missing demo videos, low scores and authorship suspicion are not reasons on their own.
 
 ## Important Reminders
 - Be constructive and encouraging in your feedback

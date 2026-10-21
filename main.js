@@ -418,7 +418,11 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
         grade: finalGrade,
         latePenalty: latePenaltyInfo,
         needsInstructorIntervention: analysis.needsInstructorIntervention || !!finalGrade?.needsInstructorReview,
-        interventionReason: analysis.interventionReason || null,
+        // The grader's own review request explains itself in gradingNotes
+        interventionReason: analysis.interventionReason ||
+          (finalGrade?.needsInstructorReview
+            ? `Grader flagged for review: ${finalGrade.gradingNotes || 'no reason given'}`
+            : null),
         errorType: analysis.errorType || null
       };
     } else {

@@ -380,7 +380,7 @@ export default (Base) => class extends Base {
                 <div style="background: rgba(231, 76, 60, 0.2); padding: 16px; border-radius: 8px; margin-bottom: 16px; border-left: 4px solid #e74c3c;">
                     <strong style="font-size: 16px;">${icon} Requires Instructor Review</strong><br>
                     <p style="margin: 12px 0 0 0; font-size: 14px;">
-                        <strong>Issue:</strong> ${result.interventionReason || 'Unknown'}
+                        <strong>Issue:</strong> ${this.describeReviewReason(result)}
                     </p>
                     ${result.errorType === 'private_repo' ? `
                         <p style="margin: 12px 0 0 0; font-size: 13px; opacity: 0.9; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px;">
@@ -590,7 +590,7 @@ export default (Base) => class extends Base {
             html += `
                 <div style="background: rgba(231, 76, 60, 0.1); border: 1px solid #e74c3c; border-radius: 8px; padding: 16px;">
                     <h4 style="margin: 0 0 8px 0; color: #e74c3c;">${result.studentName}</h4>
-                    <p style="margin: 4px 0;"><strong>Issue:</strong> ${result.interventionReason}</p>
+                    <p style="margin: 4px 0;"><strong>Issue:</strong> ${this.describeReviewReason(result)}</p>
                     <p style="margin: 4px 0;"><strong>Error:</strong> ${result.error || 'No specific error'}</p>
                     <p style="margin: 4px 0;"><strong>GitHub URL:</strong> ${result.githubUrl || 'Not provided'}</p>
                     <div style="margin-top: 12px;">
@@ -997,6 +997,18 @@ export default (Base) => class extends Base {
             console.error('❌ Regrade exception:', error);
             this.showToast(`Error during regrade: ${error.message}`, 'error');
         }
+    }
+
+    // Why a result needs review, from the most specific detail it has. Results
+    // saved before reasons were recorded fall through to the grader's notes.
+    describeReviewReason(result) {
+        const grade = result.grade?.result || result.grade || {};
+        const reason = result.interventionReason ||
+            result.error ||
+            (grade.gradingNotes ? `Grader flagged for review: ${grade.gradingNotes}` : '') ||
+            (grade.rawOutput ? 'The grader reply could not be read; grade this submission manually' : '') ||
+            'No reason was recorded for this flag. Regrade to get one.';
+        return String(reason).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
     }
 
     // Open a result's repository (including the linked branch) in the browser
