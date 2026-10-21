@@ -277,6 +277,18 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
       console.log(`📋 Using Canvas rubric: ${cleanCriteria.items.length} criteria, ${cleanCriteria.totalPoints} pts`);
     }
 
+    // The instructor's reason for a regrade goes in as custom instructions,
+    // which the prompt tells the grader to pay special attention to
+    const note = String(cleanAssignmentDetails?.instructorNote || '').trim();
+    if (note) {
+      cleanCriteria.customInstructions = [
+        cleanCriteria.customInstructions,
+        `Instructor note for this regrade (the previous grade was questioned): ${note}\n` +
+        'Take this into account. If it points to code, files, branches or links, find them in the material below and grade them. ' +
+        'If the material contradicts the note, follow the evidence and say so in gradingNotes.'
+      ].filter(Boolean).join('\n\n');
+    }
+
     // Grade on the assignment's real total. Templates have fixed totals (the
     // default is 50), and Canvas reads a posted score against points_possible,
     // so a 100-point assignment graded out of 50 would post half marks.

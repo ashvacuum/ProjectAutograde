@@ -98,6 +98,7 @@ export default (Base) => class extends Base {
                     <button class="btn btn-secondary" onclick="filterResults('review')" style="margin-left: 8px;">View Review Queue</button>
                     <button class="btn" onclick="app.regradeAllNeedingReview()" style="margin-left: 8px;">Regrade all needing review (${reviewCount})</button>
                     <button class="btn btn-secondary" onclick="app.regradeAllNeedingReview('claude-sonnet-5-5')" style="margin-left: 8px;" title="More careful than Haiku; uses more of your plan's usage">...with Sonnet 5.5</button></p>
+                    <input id="regrade-all-note" type="text" placeholder="Optional note for the AI on why these need regrading (applies to all)" style="width: 100%; margin-top: 10px; padding: 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: inherit;">
                 </div>
             `;
         }
@@ -112,7 +113,9 @@ export default (Base) => class extends Base {
 
         filteredResults.forEach((result, index) => {
             const originalIndex = this.gradingResults.indexOf(result);
-            const statusBadge = result.needsInstructorIntervention
+            const statusBadge = this.isRegrading(originalIndex)
+                ? '<span style="background: #3498db; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap;">Regrading...</span>'
+                : result.needsInstructorIntervention
                 ? '<span style="background: #e74c3c; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px;">Needs Review</span>'
                 : '<span style="background: #2ecc71; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px;">Graded</span>';
 
@@ -457,6 +460,7 @@ export default (Base) => class extends Base {
 
                 <div style="margin-top: 16px; padding: 16px; border-radius: 8px; background: rgba(255,255,255,0.06);">
                     <h4 style="margin: 0 0 12px 0;">Adjust before posting</h4>
+                    ${result.regradeNote ? `<p style="margin: 0 0 12px 0; font-size: 13px; opacity: 0.85;">Last regrade note to the AI${result.regradeModel === 'claude-sonnet-5-5' ? ' (Sonnet 5.5)' : ''}: "${esc(result.regradeNote)}"</p>` : ''}
                     <label style="display: block; font-size: 14px; margin-bottom: 4px;">Score (0 to ${maxPoints})</label>
                     <input id="adjust-score" type="number" min="0" max="${maxPoints}" step="0.1"
                            value="${esc(this.postedScore(result) ?? '')}"
@@ -464,9 +468,13 @@ export default (Base) => class extends Base {
                     <label style="display: block; font-size: 14px; margin: 12px 0 4px 0;">Comment (leave empty to post the score only)</label>
                     <textarea id="adjust-comment" rows="3"
                               style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: inherit; resize: vertical;">${esc(override ? override.comment : this.aiCommentBody(grade))}</textarea>
+                    <label style="display: block; font-size: 14px; margin: 12px 0 4px 0;">Note for the AI when regrading (optional)</label>
+                    <textarea id="regrade-note" rows="2" placeholder="e.g. The coin code is in Assets/Economy/Coin.cs; the demo video is the Week 4 link in the README."
+                              style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: inherit; resize: vertical;"></textarea>
                     <div style="display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;">
                         <button class="btn" onclick="app.saveAdjustment(${index})">Save adjustment</button>
-                        <button class="btn btn-secondary" onclick="app.regradeSubmission(${index}, { model: 'claude-sonnet-5-5' })" title="More careful than Haiku; uses more of your plan's usage">Regrade with Sonnet 5.5</button>
+                        <button class="btn btn-secondary" onclick="app.regradeFromDetails(${index})">Regrade</button>
+                        <button class="btn btn-secondary" onclick="app.regradeFromDetails(${index}, 'claude-sonnet-5-5')" title="More careful than Haiku; uses more of your plan's usage">Regrade with Sonnet 5.5</button>
                         ${override ? `<button class="btn btn-secondary" onclick="app.resetAdjustment(${index})">Reset to AI score and comment</button>` : ''}
                     </div>
                 </div>
@@ -854,9 +862,117 @@ export default (Base) => class extends Base {
         }
     }
 
+    // Regrade from Details, with whatever note is in its note box
+    regradeFromDetails(index, model = null) {
+        const note = document.getElementById('regrade-note')?.value || '';
+        document.getElementById('details-modal')?.classList.remove('show');
+        return this.regradeSubmission(index, { model, note });
+    }
+
+    // Live view of a running regrade: this.regradeQueue holds
+    // { model, startedAt, step, stopRequested, items: [{ index, name, status,
+    // score, note }] }, status being queued | running | done | review | failed.
+    startRegradeQueue(indexes, model) {
+        this.regradeQueue = {
+            model,
+            startedAt: Date.now(),
+            step: '',
+            stopRequested: false,
+            // The result object, not only its row position: if the list is
+            // reloaded mid-run, positions shift but the objects don't
+            items: indexes.map(index => ({ result: this.gradingResults[index], name: this.gradingResults[index]?.studentName || 'Unknown', status: 'queued' }))
+        };
+        clearInterval(this.regradeTimer);
+        this.regradeTimer = setInterval(() => this.renderRegradeProgress(), 1000);
+        this.renderRegradeProgress();
+    }
+
+    finishRegradeQueue() {
+        clearInterval(this.regradeTimer);
+        if (this.regradeQueue) this.regradeQueue.finishedAt = Date.now();
+        this.renderRegradeProgress();
+    }
+
+    // Step messages from the main process ("Analyzing project...", "Generating grade...")
+    updateRegradeStep(step) {
+        if (!this.regradeQueue || this.regradeQueue.finishedAt) return;
+        this.regradeQueue.step = step || '';
+        this.renderRegradeProgress();
+    }
+
+    isRegrading(index) {
+        return !!this.regradeQueue && !this.regradeQueue.finishedAt &&
+            this.regradeQueue.items.some(i => i.result === this.gradingResults[index] && i.status === 'running');
+    }
+
+    renderRegradeProgress() {
+        const el = document.getElementById('regrade-progress');
+        const q = this.regradeQueue;
+        if (!el) return;
+        if (!q) {
+            el.style.display = 'none';
+            return;
+        }
+
+        const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+        const total = q.items.length;
+        const finished = q.items.filter(i => ['done', 'review', 'failed'].includes(i.status)).length;
+        const running = q.items.find(i => i.status === 'running');
+        const secs = Math.round(((q.finishedAt || Date.now()) - q.startedAt) / 1000);
+        const elapsed = secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs}s`;
+        const modelName = q.model === 'claude-sonnet-5-5' ? 'Sonnet 5.5' : 'Haiku 5.5';
+        const statusText = {
+            queued: '<span style="opacity: 0.6;">Queued</span>',
+            running: `<strong style="color: #3498db;">Regrading${q.step ? `: ${esc(q.step)}` : '...'}</strong>`,
+            done: '<span style="color: #2ecc71;">Done</span>',
+            review: '<span style="color: #f39c12;">Still needs review</span>',
+            failed: '<span style="color: #e74c3c;">Failed</span>',
+            skipped: '<span style="opacity: 0.6;">Skipped (stopped)</span>'
+        };
+
+        const title = q.finishedAt
+            ? `Regrade finished: ${finished} of ${total} in ${elapsed}`
+            : `Regrading ${Math.min(finished + 1, total)} of ${total} with ${modelName} · ${elapsed}`;
+
+        el.style.display = 'block';
+        el.innerHTML = `
+            <div style="background: rgba(52, 152, 219, 0.12); border: 1px solid rgba(52, 152, 219, 0.5); border-radius: 8px; padding: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <strong>${title}</strong>
+                    ${q.finishedAt
+                        ? '<button class="btn btn-secondary" onclick="app.dismissRegradeProgress()">Dismiss</button>'
+                        : `<button class="btn btn-secondary" onclick="app.stopRegradeQueue()" ${q.stopRequested ? 'disabled' : ''}>${q.stopRequested ? 'Stopping after this one...' : 'Stop after current'}</button>`}
+                </div>
+                <div style="height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; margin: 10px 0; overflow: hidden;">
+                    <div style="height: 100%; width: ${total ? Math.round((finished / total) * 100) : 0}%; background: #3498db; transition: width 0.3s;"></div>
+                </div>
+                ${running ? `<p style="margin: 0 0 8px 0; font-size: 14px;">Now: ${esc(running.name)}${q.step ? ` (${esc(q.step)})` : ''}</p>` : ''}
+                <div style="max-height: 180px; overflow-y: auto; font-size: 13px;">
+                    ${q.items.map(i => `
+                        <div style="display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                            <span>${esc(i.name)}</span>
+                            <span>${statusText[i.status] || ''}${i.score !== undefined ? ` · ${esc(i.score)}` : ''}${i.note ? ` · ${esc(i.note)}` : ''}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    stopRegradeQueue() {
+        if (this.regradeQueue) this.regradeQueue.stopRequested = true;
+        this.renderRegradeProgress();
+    }
+
+    dismissRegradeProgress() {
+        this.regradeQueue = null;
+        this.renderRegradeProgress();
+    }
+
     // Regrade every result marked "Needs Review" that has a GitHub URL, one
     // at a time (each clones a repo and runs a grade), after one confirmation.
     async regradeAllNeedingReview(model = null) {
+        const note = document.getElementById('regrade-all-note')?.value || '';
         const indexes = this.gradingResults
             .map((r, i) => (r.needsInstructorIntervention && r.githubUrl ? i : -1))
             .filter(i => i >= 0);
@@ -870,29 +986,87 @@ export default (Base) => class extends Base {
             return;
         }
 
-        for (let n = 0; n < indexes.length; n++) {
-            this.showToast(`Regrading ${n + 1} of ${indexes.length}...`, 'info');
-            await this.regradeSubmission(indexes[n], { skipConfirm: true, model });
+        if (this.regradeQueue && !this.regradeQueue.finishedAt) {
+            this.showToast('A regrade is already running; see its progress above the results table', 'warning');
+            return;
         }
 
-        const stillFailing = indexes.filter(i => this.gradingResults[i].needsInstructorIntervention).length;
-        const usage = this.sumUsage(indexes.map(i => (this.gradingResults[i].grade?.result || this.gradingResults[i].grade)?.usage));
-        this.showToast(`Regrade finished: ${indexes.length - stillFailing} fixed, ${stillFailing} still need review` +
+        this.startRegradeQueue(indexes, model);
+        const targets = this.regradeQueue.items.map(i => i.result);
+        for (let n = 0; n < targets.length; n++) {
+            if (this.regradeQueue.stopRequested) {
+                this.regradeQueue.items.slice(n).forEach(i => { i.status = 'skipped'; });
+                break;
+            }
+            const index = this.gradingResults.indexOf(targets[n]);
+            if (index === -1) {
+                // The results list was replaced; never regrade someone else
+                this.regradeQueue.items[n].status = 'skipped';
+                this.regradeQueue.items[n].note = 'results were reloaded';
+                continue;
+            }
+            await this.regradeSubmission(index, { skipConfirm: true, model, note, fromQueue: true });
+        }
+        this.finishRegradeQueue();
+
+        const done = targets.filter(t => this.gradingResults.includes(t));
+        const stillFailing = done.filter(r => r.needsInstructorIntervention).length;
+        const usage = this.sumUsage(done.map(r => (r.grade?.result || r.grade)?.usage));
+        this.showToast(`Regrade finished: ${done.length - stillFailing} fixed, ${stillFailing} still need review` +
             (usage.grades ? `. Claude CLI usage: ${this.formatUsage(usage)}` : ''), stillFailing ? 'warning' : 'success');
     }
 
-    // model: optional CLI model for this regrade, e.g. 'claude-sonnet-5-5'
-    async regradeSubmission(index, { skipConfirm = false, model = null } = {}) {
+    // model: optional CLI model for this regrade, e.g. 'claude-sonnet-5-5'.
+    // Shows its progress in the regrade card; fromQueue means a batch owns it.
+    // Returns 'done', 'review', 'failed' or 'cancelled'.
+    // note: the instructor's reason for the regrade, passed to the grader.
+    async regradeSubmission(index, { skipConfirm = false, model = null, note = '', fromQueue = false } = {}) {
+        if (!fromQueue && this.regradeQueue && !this.regradeQueue.finishedAt) {
+            this.showToast('A regrade is already running; see its progress above the results table', 'warning');
+            return 'cancelled';
+        }
+
+        const target = this.gradingResults[index];
+        const outcome = await this.runRegrade(index, { skipConfirm, model, note, onStart: () => {
+            if (!fromQueue) this.startRegradeQueue([index], model);
+            const item = this.regradeQueue?.items.find(i => i.result === target);
+            if (item) item.status = 'running';
+            this.regradeQueue.step = 'Starting...';
+            this.renderRegradeProgress();
+            this.loadGradingResults(); // show the "Regrading..." badge on the row
+        } });
+
+        const item = this.regradeQueue?.items.find(i => i.result === target);
+        if (item && outcome !== 'cancelled') {
+            item.status = outcome;
+            const r = target;
+            const g = r?.grade?.result || r?.grade;
+            if (outcome === 'done' && g?.overallGrade !== undefined) item.score = `${Math.round(g.overallGrade * 10) / 10}/${g.maxPoints || 50}`;
+            if (outcome !== 'done') item.note = (outcome === 'failed' ? r?.lastRegradeError : r?.interventionReason) || r?.error || '';
+            if (item.note) item.note = String(item.note).slice(0, 80);
+            if (r && outcome !== 'failed') delete r.lastRegradeError;
+            this.regradeQueue.step = '';
+        }
+        if (!fromQueue) {
+            if (outcome === 'cancelled') this.regradeQueue = this.regradeQueue?.finishedAt ? this.regradeQueue : null;
+            else this.finishRegradeQueue();
+            this.renderRegradeProgress();
+        }
+        this.loadGradingResults();
+        return outcome;
+    }
+
+    async runRegrade(index, { skipConfirm = false, model = null, note = '', onStart = () => {} } = {}) {
         const result = this.gradingResults[index];
 
         if (!result) {
             this.showToast('Cannot regrade - result not found', 'error');
-            return;
+            return 'failed';
         }
 
         if (!result.githubUrl) {
             this.showToast('Cannot regrade - no GitHub URL', 'error');
-            return;
+            return 'failed';
         }
 
         console.log('\n========================================');
@@ -907,10 +1081,10 @@ export default (Base) => class extends Base {
 
         if (!confirmRegrade) {
             console.log('❌ Regrade cancelled by user');
-            return;
+            return 'cancelled';
         }
 
-        this.showToast(`Starting regrade for ${result.studentName}...`, 'info');
+        onStart();
 
         try {
             // Get course and assignment info
@@ -920,7 +1094,8 @@ export default (Base) => class extends Base {
 
             if (!courseId || !assignmentId || !userId) {
                 this.showToast('Missing course/assignment info for regrade', 'error');
-                return;
+                result.lastRegradeError = 'Missing course/assignment info';
+                return 'failed';
             }
 
             // Get criteria - try to use stored criteria or load from templates
@@ -959,7 +1134,9 @@ export default (Base) => class extends Base {
                     points_possible: assignment?.points_possible || null,
                     submitted_at: submission?.submitted_at || null,
                     due_at: assignment?.due_at || null,
-                    rubric: assignment?.rubric || null
+                    rubric: assignment?.rubric || null,
+                    // Why the instructor asked for this regrade (see grader-analyze-project)
+                    instructorNote: note ? String(note).trim().slice(0, 1000) : ''
                 };
             } catch (error) {
                 console.warn('Could not fetch submission details:', error);
@@ -988,6 +1165,8 @@ export default (Base) => class extends Base {
                 result.regradedAt = new Date().toISOString();
                 result.regraded = true; // Mark as regraded to allow re-posting to Canvas
                 delete result.override; // An adjustment was for the old grade
+                result.regradeNote = note ? String(note).trim() : null;
+                result.regradeModel = model || null;
 
                 console.log('✅ Result updated successfully');
                 this.showToast(`Regrade completed for ${result.studentName}!`, 'success');
@@ -997,6 +1176,7 @@ export default (Base) => class extends Base {
 
                 // Refresh display
                 this.loadGradingResults();
+                return result.needsInstructorIntervention ? 'review' : 'done';
             } else {
                 console.error('❌ Regrade failed:', regradeResult.error);
 
@@ -1012,9 +1192,11 @@ export default (Base) => class extends Base {
 
                     await this.saveGradingResults();
                     this.loadGradingResults();
-                } else {
-                    this.showToast(`Regrade failed: ${regradeResult.error}`, 'error');
+                    return 'review';
                 }
+                this.showToast(`Regrade failed: ${regradeResult.error}`, 'error');
+                result.lastRegradeError = regradeResult.error;
+                return 'failed';
             }
 
             console.log('========================================\n');
@@ -1022,6 +1204,8 @@ export default (Base) => class extends Base {
         } catch (error) {
             console.error('❌ Regrade exception:', error);
             this.showToast(`Error during regrade: ${error.message}`, 'error');
+            result.lastRegradeError = error.message;
+            return 'failed';
         }
     }
 

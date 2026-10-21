@@ -534,7 +534,17 @@ export default (Base) => class extends Base {
         }
     }
 
+    // Both of these replace the results list, which a running regrade is using
+    regradeRunning() {
+        if (this.regradeQueue && !this.regradeQueue.finishedAt) {
+            this.showToast('Wait for the regrade to finish (or use "Stop after current") first', 'warning');
+            return true;
+        }
+        return false;
+    }
+
     async refreshSavedResults() {
+        if (this.regradeRunning()) return;
         console.log('🔄 Refreshing saved results...');
         this.gradingResults = []; // Clear current results
         await this.loadGradingResults(); // Reload from storage
@@ -542,6 +552,7 @@ export default (Base) => class extends Base {
     }
 
     async clearAllResults() {
+        if (this.regradeRunning()) return;
         const confirmed = confirm('Are you sure you want to clear ALL saved grading results? This cannot be undone.');
 
         if (!confirmed) return;

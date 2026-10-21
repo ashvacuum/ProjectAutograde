@@ -1842,6 +1842,9 @@ export default (Base) => class extends Base {
     }
 
     updateGradingProgress(progress) {
+        // A regrade from Results shows its step in the regrade progress card
+        if (this.regradeQueue) this.updateRegradeStep(progress?.currentStudent);
+
         const progressFill = document.getElementById('progress-fill');
         const progressText = document.getElementById('grading-progress');
 
