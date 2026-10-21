@@ -436,14 +436,19 @@ export default (Base) => class extends Base {
             const result = await window.electronAPI.canvas.getAssignments(courseId);
 
             if (result.success && result.assignments.length > 0) {
-                let html = '<table class="table"><thead><tr><th>Assignment</th><th>Due Date</th><th>Submissions</th><th>Actions</th></tr></thead><tbody>';
+                let html = '<table class="table"><thead><tr><th>Assignment</th><th>Due Date</th><th>Needs Grading</th><th>Submissions</th><th>Actions</th></tr></thead><tbody>';
 
                 for (const assignment of result.assignments) {
                     const dueDate = assignment.due_at ? new Date(assignment.due_at).toLocaleDateString() : 'No due date';
+                    // Canvas's own count of submitted-but-ungraded work
+                    const needsGrading = assignment.needs_grading_count > 0
+                        ? `<strong style="color: #f39c12;">${assignment.needs_grading_count}</strong>`
+                        : '<span style="color: #2ecc71;">All graded</span>';
                     html += `
                         <tr>
                             <td>${assignment.name}</td>
                             <td>${dueDate}</td>
+                            <td>${needsGrading}</td>
                             <td><button class="btn btn-secondary" onclick="app.viewSubmissions(${courseId}, ${assignment.id})">View</button></td>
                             <td><button class="btn" onclick="app.gradeAssignment(${courseId}, ${assignment.id})">Grade</button></td>
                         </tr>
@@ -461,6 +466,17 @@ export default (Base) => class extends Base {
             assignmentsList.innerHTML = '<p>Error loading assignments.</p>';
             this.showToast(`Error loading assignments: ${error.message}`, 'error');
         }
+    }
+
+    // The score already in Canvas for a submission, before any auto-grading.
+    formatCanvasScore(submission, pointsPossible) {
+        const graded = submission.workflow_state === 'graded' && submission.score !== null && submission.score !== undefined;
+        if (!graded) {
+            return '<span style="opacity: 0.7;">Not graded</span>';
+        }
+        const max = pointsPossible ? `/${pointsPossible}` : '';
+        const when = submission.graded_at ? ` title="Graded ${new Date(submission.graded_at).toLocaleString()}"` : '';
+        return `<strong${when}>${submission.score}${max}</strong>`;
     }
 
     async viewSubmissions(courseId, assignmentId) {
@@ -483,7 +499,13 @@ export default (Base) => class extends Base {
                 // Create submissions table
                 let html = '<div style="margin-bottom: 20px;"><button class="btn btn-secondary" onclick="app.loadAssignments()">← Back to Assignments</button></div>';
                 html += '<h3>Assignment Submissions</h3>';
-                html += '<table class="table"><thead><tr><th>Student</th><th>Submission Date</th><th>GitHub Repository</th><th>Actions</th></tr></thead><tbody>';
+                // Assignments are cached, so this lookup costs no extra request
+                const assignmentsResult = await window.electronAPI.canvas.getAssignments(courseId);
+                const pointsPossible = assignmentsResult.success
+                    ? assignmentsResult.assignments.find(a => a.id == assignmentId)?.points_possible
+                    : null;
+
+                html += '<table class="table"><thead><tr><th>Student</th><th>Submission Date</th><th>Canvas Score</th><th>GitHub Repository</th><th>Actions</th></tr></thead><tbody>';
 
                 result.submissions.forEach((submission, index) => {
                     const studentName = submission.user ? submission.user.name : 'Unknown Student';
@@ -510,6 +532,7 @@ export default (Base) => class extends Base {
                         <tr>
                             <td>${studentName}</td>
                             <td>${submittedAt}</td>
+                            <td>${this.formatCanvasScore(submission, pointsPossible)}</td>
                             <td>${githubDisplay}</td>
                             <td>
                                 ${githubUrl ? `<button class="btn" onclick="app.gradeIndividualSubmission('${courseId}', '${assignmentId}', '${submission.user_id}', '${githubUrl}')">Grade This</button>` : '<span style="color: #999;">Cannot grade</span>'}
@@ -665,6 +688,25 @@ export default (Base) => class extends Base {
                 <p><strong>Due Date:</strong> ${assignment.due_at ? new Date(assignment.due_at).toLocaleDateString() : 'No due date'}</p>
                 <p><strong>Description:</strong> ${assignment.description || 'No description available'}</p>
                 <p><strong>GitHub Submissions Found:</strong> ${submissions.length}</p>
+            </div>
+
+            <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                <h3>Current Canvas Scores</h3>
+                <p style="margin: 0 0 12px 0; opacity: 0.8;">${submissions.filter(s => s.workflow_state === 'graded').length} of ${submissions.length} already graded in Canvas.</p>
+                <table class="table">
+                    <thead><tr><th>Student</th><th>Submitted</th><th>Canvas Score</th></tr></thead>
+                    <tbody>
+                        ${[...submissions]
+                            .sort((a, b) => (a.user?.name || '').localeCompare(b.user?.name || ''))
+                            .map(s => `
+                                <tr>
+                                    <td>${s.user?.name || 'Unknown'}</td>
+                                    <td>${s.submitted_at ? new Date(s.submitted_at).toLocaleString() : '-'}</td>
+                                    <td>${this.formatCanvasScore(s, assignment.points_possible)}</td>
+                                </tr>
+                            `).join('')}
+                    </tbody>
+                </table>
             </div>
 
             <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
