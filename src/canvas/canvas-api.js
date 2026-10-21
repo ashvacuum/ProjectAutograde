@@ -42,14 +42,14 @@ class CanvasAPI {
         params: {
           enrollment_type: 'teacher',
           enrollment_state: 'active',
-          state: ['available', 'completed'],
+          state: ['available'],
           include: ['term'],
           per_page: 100
         }
       });
       return {
         success: true,
-        courses: response.data.filter(course => !course.access_restricted_by_date)
+        courses: response.data.filter(course => !course.access_restricted_by_date && this.isCurrentCourse(course))
       };
     } catch (error) {
       return {
@@ -57,6 +57,22 @@ class CanvasAPI {
         error: this.handleError(error)
       };
     }
+  }
+
+  /**
+   * True when the course's active period includes today. Course dates win
+   * when the course overrides its term and actually has them (many courses
+   * set the override with no dates), otherwise the term's dates are used.
+   * A date missing from both counts as open-ended (e.g. "Default Term").
+   */
+  isCurrentCourse(course, now = Date.now()) {
+    const own = course.restrict_enrollments_to_course_dates ? course : {};
+    const term = course.term || {};
+    const startAt = own.start_at || term.start_at;
+    const endAt = own.end_at || term.end_at;
+    const start = startAt ? Date.parse(startAt) : -Infinity;
+    const end = endAt ? Date.parse(endAt) : Infinity;
+    return start <= now && now <= end;
   }
 
   async getAssignments(courseId) {
