@@ -36,8 +36,8 @@ class APIKeyManager {
                 name: 'Anthropic (Claude)',
                 baseUrl: 'https://api.anthropic.com/v1',
                 fields: ['apiKey'],
-                models: ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
-                defaultModel: 'claude-opus-4-8'
+                models: ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'],
+                defaultModel: 'claude-haiku-5-5'
             },
             google: {
                 name: 'Google AI (Gemini)',
@@ -486,7 +486,10 @@ class APIKeyManager {
                         config: {
                             ...config,
                             apiKey,
-                            model: config.model || this.supportedProviders[provider].defaultModel,
+                            // Saved models no longer offered (e.g. 4.x) fall back to the default
+                            model: (provider === 'anthropic' && !this.supportedProviders.anthropic.models.includes(config.model))
+                                ? this.supportedProviders.anthropic.defaultModel
+                                : (config.model || this.supportedProviders[provider].defaultModel),
                             providerInfo: this.supportedProviders[provider]
                         }
                     };

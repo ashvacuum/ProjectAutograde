@@ -48,7 +48,7 @@ async function testLLM() {
                     'anthropic-version': '2023-06-01'
                 },
                 body: JSON.stringify({
-                    model: 'claude-3-5-sonnet-20241022',
+                    model: 'claude-haiku-5-5',
                     max_tokens: 10,
                     messages: [{ role: 'user', content: 'test' }]
                 })
@@ -56,7 +56,7 @@ async function testLLM() {
 
             if (response.ok) {
                 console.log('   ✅ Anthropic API key is VALID and working!');
-                console.log('   Model: claude-3-5-sonnet-20241022');
+                console.log('   Model: claude-haiku-5-5');
             } else {
                 const error = await response.text();
                 console.log('   ❌ Anthropic API key test failed');

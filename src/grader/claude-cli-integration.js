@@ -23,7 +23,12 @@ class ClaudeCLIIntegration {
     return new Promise((resolve, reject) => {
       let child;
       try {
-        child = spawn('claude', args, { shell: true });
+        // Strip API credentials (main.js loads .env) so the CLI uses the
+        // subscription login instead of billing API credits.
+        const env = { ...process.env };
+        delete env.ANTHROPIC_API_KEY;
+        delete env.ANTHROPIC_AUTH_TOKEN;
+        child = spawn('claude', args, { shell: true, env });
       } catch (error) {
         return reject(error);
       }
@@ -100,7 +105,7 @@ class ClaudeCLIIntegration {
       throw new Error(`Claude CLI not available: ${detection.error || 'unknown'}`);
     }
 
-    const result = await this._run(['-p', '--output-format', 'text'], prompt);
+    const result = await this._run(['-p', '--model', 'claude-haiku-5-5', '--output-format', 'text'], prompt);
 
     if (result.code !== 0) {
       const message = result.stderr || `Claude CLI exited with code ${result.code}`;

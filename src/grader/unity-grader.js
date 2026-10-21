@@ -105,11 +105,23 @@ class UnityGrader {
         if (allCSharpFiles.length > 0) {
           console.log(`✅ Found ${allCSharpFiles.length} C# files in repository root`);
           csharpFiles = allCSharpFiles;
+
+          // Mark as non-standard structure
+          projectStructure.isNonStandard = true;
+          projectStructure.nonStandardReason = 'C# files found outside of Unity Assets folder structure';
         } else {
           console.log('❌ No C# files found anywhere in repository');
         }
       } else {
         console.log(`✅ Found ${csharpFiles.length} C# files in Unity project`);
+        projectStructure.isNonStandard = false;
+      }
+
+      // Additional check: If no Assets folder but has C# files, mark as non-standard
+      if (!projectStructure.hasAssetsFolder && csharpFiles.length > 0) {
+        console.log('ℹ️  Non-standard Unity project detected (no Assets folder, but C# files present)');
+        projectStructure.isNonStandard = true;
+        projectStructure.nonStandardReason = projectStructure.nonStandardReason || 'No Assets folder, but C# files present';
       }
 
       const codeAnalysis = await this.analyzeCSharpCode(csharpFiles);

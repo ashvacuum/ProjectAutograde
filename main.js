@@ -445,7 +445,7 @@ ipcMain.handle('claude-cli-detect', async () => {
 
 ipcMain.handle('claude-cli-get-setting', async () => {
   try {
-    return { success: true, enabled: store.get('useClaudeCLI', false) };
+    return { success: true, enabled: store.get('useClaudeCLI', true) };
   } catch (error) {
     return { success: false, error: error.message };
   }
@@ -857,7 +857,7 @@ ipcMain.handle('results-delete', async (event, resultId) => {
 app.whenReady().then(async () => {
   try {
     // Apply the saved "use Claude CLI" preference before the first init.
-    llmIntegration.setPreferCLI(store.get('useClaudeCLI', false));
+    llmIntegration.setPreferCLI(store.get('useClaudeCLI', true));
     const isAvailable = await llmIntegration.initialize();
     if (isAvailable) {
       console.log('✅ LLM integration ready');
