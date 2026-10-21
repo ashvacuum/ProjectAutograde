@@ -374,11 +374,18 @@ class CanvasAPI {
     }
   }
 
+  // Scores go to Canvas with at most one decimal, so float noise like
+  // 29.9999 posts as 30 (rubric levels such as 9.6 keep their decimal).
+  static roundScore(score) {
+    const n = Number(score);
+    return Number.isFinite(n) ? Math.round(n * 10) / 10 : score;
+  }
+
   async postGrade(courseId, assignmentId, userId, grade, comment = '') {
     try {
       const gradeData = {
         submission: {
-          posted_grade: grade
+          posted_grade: CanvasAPI.roundScore(grade)
         }
       };
 

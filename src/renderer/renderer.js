@@ -148,6 +148,7 @@ class AppCore {
                 this.loadCriteriaTemplates();
                 break;
             case 'results':
+                this.loadPostCommentsSetting();
                 this.loadGradingResults();
                 this.updateSavedResultsInfo();
                 break;

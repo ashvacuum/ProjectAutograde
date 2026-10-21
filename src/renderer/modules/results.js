@@ -124,7 +124,9 @@ export default (Base) => class extends Base {
                 }
             }
             const gradeData = result.grade?.result || result.grade || {};
-            const grade = gradeValue !== 'N/A' ? `${gradeValue}/${gradeData.maxPoints || 50}` : 'N/A';
+            // Same one-decimal rounding as what gets posted (CanvasAPI.roundScore)
+            const shown = typeof gradeValue === 'number' ? Math.round(gradeValue * 10) / 10 : gradeValue;
+            const grade = gradeValue !== 'N/A' ? `${shown}/${gradeData.maxPoints || 50}` : 'N/A';
 
             // Instructor-only flag from the AI-authorship check
             const suspicion = gradeData.authorship?.suspicion;
@@ -754,7 +756,8 @@ export default (Base) => class extends Base {
 
             if (postResult.success) {
                 console.log('✅ Grade posted successfully');
-                this.showToast(`Grade posted to Canvas for ${result.studentName}`, 'success');
+                const commentsOn = (await window.electronAPI.store.get('canvas.postComments')) !== false;
+                this.showToast(`Grade posted to Canvas for ${result.studentName}${commentsOn ? '' : ' (score only, no comment)'}`, 'success');
                 result.postedToCanvas = true;
                 result.regraded = false; // Clear regraded flag after posting
                 this.loadGradingResults(); // Refresh display
@@ -992,6 +995,18 @@ export default (Base) => class extends Base {
         }
     }
 
+    // "Post comments with grades": stored so the main process can drop the
+    // comment from every grade post (see canvas-post-grade).
+    async loadPostCommentsSetting() {
+        const toggle = document.getElementById('post-comments-toggle');
+        if (toggle) toggle.checked = (await window.electronAPI.store.get('canvas.postComments')) !== false;
+    }
+
+    async setPostComments(enabled) {
+        await window.electronAPI.store.set('canvas.postComments', !!enabled);
+        this.showToast(enabled ? 'Comments will be posted with grades' : 'Grades will be posted without comments', 'info');
+    }
+
     // Total the grader usage records ({ costUSD, inputTokens, ... } from the
     // Claude CLI) across a list of them; missing entries are skipped.
     sumUsage(usages) {
@@ -1034,9 +1049,13 @@ export default (Base) => class extends Base {
             comment = comment.slice(0, 297).replace(/\s+\S*$/, '') + '...';
         }
 
+        // Same one-decimal rounding as the posted score (CanvasAPI.roundScore)
+        const score = Number.isFinite(Number(result.overallGrade))
+            ? Math.round(Number(result.overallGrade) * 10) / 10
+            : result.overallGrade;
         return comment
-            ? `Score: ${result.overallGrade}/${maxPoints}\n${comment}`
-            : `Score: ${result.overallGrade}/${maxPoints}`;
+            ? `Score: ${score}/${maxPoints}\n${comment}`
+            : `Score: ${score}/${maxPoints}`;
     }
 
     markAsResolved(index) {

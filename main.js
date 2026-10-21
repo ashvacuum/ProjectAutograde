@@ -234,7 +234,11 @@ ipcMain.handle('canvas-post-comment', async (event, courseId, assignmentId, user
 ipcMain.handle('canvas-post-grade', async (event, courseId, assignmentId, userId, grade, comment) => {
   try {
     const api = canvasAuth.getAPI();
-    return await api.postGrade(courseId, assignmentId, userId, grade, comment);
+    // "Post comments with grades" (Results panel) off: post the score only.
+    // Every grade post goes through here, including the automatic 0.1 for
+    // inaccessible repositories.
+    const postComments = store.get('canvas.postComments', true);
+    return await api.postGrade(courseId, assignmentId, userId, grade, postComments ? comment : '');
   } catch (error) {
     return { success: false, error: error.message };
   }
@@ -350,7 +354,7 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
       // The max is what we graded against, not whatever the model echoed back
       if (gradingResult.result && cleanCriteria.totalPoints) {
         gradingResult.result.maxPoints = cleanCriteria.totalPoints;
-        gradingResult.result.overallGrade = Math.min(gradingResult.result.overallGrade, cleanCriteria.totalPoints);
+        gradingResult.result.overallGrade = CanvasAPI.roundScore(Math.min(gradingResult.result.overallGrade, cleanCriteria.totalPoints));
       }
 
       // Apply late penalty if applicable
@@ -384,7 +388,7 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
           console.log(`   Final grade: ${gradeWithPenalty.adjustedGrade}/${gradeWithPenalty.maxPoints}`);
 
           // Update the grade with penalty applied
-          finalGrade.overallGrade = gradeWithPenalty.adjustedGrade;
+          finalGrade.overallGrade = CanvasAPI.roundScore(gradeWithPenalty.adjustedGrade);
           finalGrade.originalGradeBeforePenalty = gradeWithPenalty.originalGrade;
 
           // Store penalty info for display
