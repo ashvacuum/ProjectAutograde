@@ -1,13 +1,43 @@
 const axios = require('axios');
 
+// How long Canvas reads are reused before refetching. Submissions change as
+// students submit, so they expire sooner; posting a grade drops them at once.
+const CACHE_TTL = {
+  courses: 30 * 60 * 1000,
+  assignments: 30 * 60 * 1000,
+  submissions: 5 * 60 * 1000
+};
+
 class CanvasAPI {
   constructor() {
     this.baseUrl = null;
     this.token = null;
     this.headers = null;
+    this.cache = new Map(); // key -> { expires, promise }
+  }
+
+  /**
+   * Memoize a Canvas read for ttlMs. Stores the promise, so concurrent
+   * callers share one request; failed results are not kept.
+   */
+  cached(key, ttlMs, fetch) {
+    const hit = this.cache.get(key);
+    if (hit && hit.expires > Date.now()) return hit.promise;
+
+    const promise = fetch().then(result => {
+      if (!result?.success) this.cache.delete(key);
+      return result;
+    });
+    this.cache.set(key, { expires: Date.now() + ttlMs, promise });
+    return promise;
+  }
+
+  clearCache() {
+    this.cache.clear();
   }
 
   authenticate(apiUrl, token) {
+    this.cache.clear();
     this.baseUrl = apiUrl.replace(/\/$/, '');
     this.token = token;
     this.headers = {
@@ -35,7 +65,11 @@ class CanvasAPI {
     }
   }
 
-  async getCourses() {
+  getCourses() {
+    return this.cached('courses', CACHE_TTL.courses, () => this.fetchCourses());
+  }
+
+  async fetchCourses() {
     try {
       const response = await axios.get(`${this.baseUrl}/courses`, {
         headers: this.headers,
@@ -116,7 +150,11 @@ class CanvasAPI {
     return dates.length === 0 || dates.some(d => start <= d && d <= end);
   }
 
-  async getAssignments(courseId) {
+  getAssignments(courseId) {
+    return this.cached(`assignments:${courseId}`, CACHE_TTL.assignments, () => this.fetchAssignments(courseId));
+  }
+
+  async fetchAssignments(courseId) {
     try {
       const [response, courseResponse] = await Promise.all([
         axios.get(`${this.baseUrl}/courses/${courseId}/assignments`, {
@@ -151,7 +189,11 @@ class CanvasAPI {
     }
   }
 
-  async getSubmissions(courseId, assignmentId) {
+  getSubmissions(courseId, assignmentId) {
+    return this.cached(`submissions:${courseId}:${assignmentId}`, CACHE_TTL.submissions, () => this.fetchSubmissions(courseId, assignmentId));
+  }
+
+  async fetchSubmissions(courseId, assignmentId) {
     try {
       const response = await axios.get(`${this.baseUrl}/courses/${courseId}/assignments/${assignmentId}/submissions`, {
         headers: this.headers,
@@ -319,6 +361,7 @@ class CanvasAPI {
         { headers: this.headers }
       );
 
+      this.cache.delete(`submissions:${courseId}:${assignmentId}`);
       return { success: true };
     } catch (error) {
       return {
@@ -356,6 +399,7 @@ class CanvasAPI {
         );
       }
 
+      this.cache.delete(`submissions:${courseId}:${assignmentId}`);
       return {
         success: true,
         submission: gradeResponse.data

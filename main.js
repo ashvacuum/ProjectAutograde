@@ -190,6 +190,11 @@ ipcMain.handle('canvas-authenticate', async (event, apiUrl, token) => {
   }
 });
 
+ipcMain.handle('canvas-clear-cache', () => {
+  if (canvasAuth.isAuthenticated) canvasAuth.getAPI().clearCache();
+  return { success: true };
+});
+
 ipcMain.handle('canvas-get-courses', async () => {
   try {
     const api = canvasAuth.getAPI();

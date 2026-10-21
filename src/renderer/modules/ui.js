@@ -72,8 +72,10 @@ export default (Base) => class extends Base {
             // If no Canvas auth or no API keys, this is first time use
             const hasCanvas = !!canvasUser;
             const hasAIKey = apiKeys.success && Object.keys(apiKeys.keys).length > 0;
+            // The Claude CLI grades without a key, so it counts as configured AI
+            const hasAI = hasAIKey || (await window.electronAPI.claudeCli.detect()).available;
 
-            return !hasCanvas || !hasAIKey;
+            return !hasCanvas || !hasAI;
         } catch (error) {
             console.error('Error checking first time use:', error);
             return false;

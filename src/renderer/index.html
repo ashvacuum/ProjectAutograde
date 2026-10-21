@@ -890,7 +890,10 @@
                 </div>
                 <div class="content-area">
                     <div class="card">
-                        <h3>Course Selection</h3>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <h3>Course Selection</h3>
+                            <button class="btn btn-secondary" onclick="app.refreshCanvasData()" title="Canvas data is cached for up to 30 minutes">Refresh from Canvas</button>
+                        </div>
                         <select class="form-input" id="course-select" onchange="loadAssignments()">
                             <option value="">Select a course...</option>
                         </select>

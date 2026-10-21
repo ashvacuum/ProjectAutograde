@@ -381,6 +381,20 @@ export default (Base) => class extends Base {
         return course.name;
     }
 
+    // Drop cached Canvas data and reload the course lists (and the open
+    // assignment list, if a course is selected).
+    async refreshCanvasData() {
+        await window.electronAPI.canvas.clearCache();
+        const courseId = document.getElementById('course-select')?.value;
+        await Promise.all([this.loadCoursesForAssignments(), this.loadGradingCourses()]);
+        const select = document.getElementById('course-select');
+        if (courseId && select) {
+            select.value = courseId;
+            await this.loadAssignments();
+        }
+        this.showToast('Refreshed from Canvas', 'success');
+    }
+
     async loadCoursesForAssignments() {
         if (!this.canvasConnected) {
             document.getElementById('assignments-list').innerHTML =
@@ -751,9 +765,21 @@ export default (Base) => class extends Base {
                 select.appendChild(option);
             }
 
+            const startBtn = document.getElementById('start-batch-grading-from-assignments-btn');
+
+            // The assignment's Canvas rubric replaces template criteria during
+            // grading (see grader-analyze-project), so offer it and preselect it.
+            if (this.currentAssignment?.assignmentDetails?.rubric?.length) {
+                const option = document.createElement('option');
+                option.value = 'canvas-rubric';
+                option.textContent = 'Canvas rubric (attached to this assignment)';
+                select.insertBefore(option, select.options[1] || null);
+                select.value = 'canvas-rubric';
+                if (startBtn) startBtn.disabled = false;
+            }
+
             // Enable the start button when criteria is selected
             select.addEventListener('change', () => {
-                const startBtn = document.getElementById('start-batch-grading-from-assignments-btn');
                 if (startBtn) {
                     startBtn.disabled = !select.value;
                 }

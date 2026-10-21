@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   canvas: {
     authenticate: (apiUrl, token) => ipcRenderer.invoke('canvas-authenticate', apiUrl, token),
+    clearCache: () => ipcRenderer.invoke('canvas-clear-cache'),
     getCourses: () => ipcRenderer.invoke('canvas-get-courses'),
     getAssignments: (courseId) => ipcRenderer.invoke('canvas-get-assignments', courseId),
     getSubmissions: (courseId, assignmentId) => ipcRenderer.invoke('canvas-get-submissions', courseId, assignmentId),

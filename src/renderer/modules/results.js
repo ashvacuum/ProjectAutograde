@@ -232,6 +232,13 @@ export default (Base) => class extends Base {
                 if (urlInput) urlInput.value = url;
             }
 
+            // The token is never sent back to the renderer; say it's stored
+            // so an empty field doesn't read as "not saved".
+            const tokenInput = document.getElementById('canvas-token');
+            if (tokenInput && user) {
+                tokenInput.placeholder = 'Token stored securely - enter a new one only to replace it';
+            }
+
             // If already authenticated, show the user info
             if (user && url) {
                 this.canvasConnected = true;
