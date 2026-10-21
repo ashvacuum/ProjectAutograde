@@ -268,6 +268,23 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
       console.log(`📋 Using Canvas rubric: ${cleanCriteria.items.length} criteria, ${cleanCriteria.totalPoints} pts`);
     }
 
+    // Grade on the assignment's real total. Templates have fixed totals (the
+    // default is 50), and Canvas reads a posted score against points_possible,
+    // so a 100-point assignment graded out of 50 would post half marks.
+    const pointsPossible = Number(cleanAssignmentDetails?.points_possible) || 0;
+    const templateTotal = (cleanCriteria.items || []).reduce((sum, item) => sum + (item.points || 0), 0);
+    if (pointsPossible > 0 && templateTotal > 0 && Math.abs(templateTotal - pointsPossible) > 0.01) {
+      const factor = pointsPossible / templateTotal;
+      const round = n => Math.round(n * factor * 100) / 100;
+      cleanCriteria.items = cleanCriteria.items.map(item => ({
+        ...item,
+        points: round(item.points || 0),
+        ratings: (item.ratings || []).map(r => ({ ...r, points: round(r.points || 0) }))
+      }));
+      console.log(`📏 Scaled criteria from ${templateTotal} to the assignment's ${pointsPossible} points`);
+    }
+    if (pointsPossible > 0) cleanCriteria.totalPoints = pointsPossible;
+
     console.log('✅ Data serialization successful');
 
     // Send progress updates to the renderer
@@ -328,6 +345,12 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
       for (const item of cleanCriteria.items || []) {
         const score = gradingResult.result?.criteriaScores?.[item.id];
         if (score && !score.name) score.name = item.name;
+      }
+
+      // The max is what we graded against, not whatever the model echoed back
+      if (gradingResult.result && cleanCriteria.totalPoints) {
+        gradingResult.result.maxPoints = cleanCriteria.totalPoints;
+        gradingResult.result.overallGrade = Math.min(gradingResult.result.overallGrade, cleanCriteria.totalPoints);
       }
 
       // Apply late penalty if applicable

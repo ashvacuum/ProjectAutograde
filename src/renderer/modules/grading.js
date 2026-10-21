@@ -905,7 +905,7 @@ export default (Base) => class extends Base {
                             <p><strong>Grading ${submission.user?.name || 'Unknown'} (${i + 1}/${submissionsToGrade.length})</strong></p>
                             ${i > 0 ? `
                                 <p style="margin-top: 10px; font-size: 14px;">
-                                    Avg Score: ${averageScore.toFixed(1)}/50 |
+                                    Avg Score: ${averageScore.toFixed(1)}/${this.currentAssignment?.assignmentDetails?.points_possible || 50} |
                                     Errors: <span style="color: ${errorCount > 0 ? '#e74c3c' : '#2ecc71'};">${errorCount}</span> |
                                     Needs Review: <span style="color: ${needsReviewCount > 0 ? '#f39c12' : '#2ecc71'};">${needsReviewCount}</span>
                                 </p>
@@ -1818,7 +1818,7 @@ export default (Base) => class extends Base {
                         <hr style="margin: 10px 0; border: none; border-top: 1px solid rgba(52, 152, 219, 0.3);">
                         <h4 style="margin: 10px 0 5px 0; color: #2c3e50;">Statistics</h4>
                         <p style="margin: 5px 0;"><strong>Completed:</strong> ${completed}</p>
-                        <p style="margin: 5px 0;"><strong>Average Score:</strong> ${stats.averageScore ? stats.averageScore.toFixed(1) : 'N/A'}/50</p>
+                        <p style="margin: 5px 0;"><strong>Average Score:</strong> ${stats.averageScore ? stats.averageScore.toFixed(1) : 'N/A'}/${this.currentAssignment?.assignmentDetails?.points_possible || 50}</p>
                         <p style="margin: 5px 0;"><strong>Errors:</strong> <span style="color: ${stats.errorCount > 0 ? '#e74c3c' : '#2ecc71'};">${stats.errorCount}</span></p>
                         <p style="margin: 5px 0;"><strong>Needs Review:</strong> <span style="color: ${stats.needsReviewCount > 0 ? '#f39c12' : '#2ecc71'};">${stats.needsReviewCount}</span></p>
                     ` : ''}
