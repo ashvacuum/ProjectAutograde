@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   claudeCli: {
     detect: () => ipcRenderer.invoke('claude-cli-detect'),
+    verify: () => ipcRenderer.invoke('claude-cli-verify'),
     getSetting: () => ipcRenderer.invoke('claude-cli-get-setting'),
     setSetting: (enabled) => ipcRenderer.invoke('claude-cli-set-setting', enabled)
   },

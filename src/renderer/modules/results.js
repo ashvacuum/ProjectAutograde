@@ -93,7 +93,8 @@ export default (Base) => class extends Base {
                 <div style="background: rgba(241, 196, 15, 0.2); border: 1px solid #f1c40f; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
                     <h4 style="margin: 0 0 8px 0; color: #f1c40f;">⚠️ Instructor Intervention Required</h4>
                     <p style="margin: 0;">${reviewCount} submission(s) require manual review.
-                    <button class="btn btn-secondary" onclick="filterResults('review')" style="margin-left: 8px;">View Review Queue</button></p>
+                    <button class="btn btn-secondary" onclick="filterResults('review')" style="margin-left: 8px;">View Review Queue</button>
+                    <button class="btn" onclick="app.regradeAllNeedingReview()" style="margin-left: 8px;">Regrade all needing review (${reviewCount})</button></p>
                 </div>
             `;
         }
@@ -120,7 +121,14 @@ export default (Base) => class extends Base {
                     gradeValue = result.grade.result.overallGrade;
                 }
             }
-            const grade = gradeValue !== 'N/A' ? `${gradeValue}/50` : 'N/A';
+            const gradeData = result.grade?.result || result.grade || {};
+            const grade = gradeValue !== 'N/A' ? `${gradeValue}/${gradeData.maxPoints || 50}` : 'N/A';
+
+            // Instructor-only flag from the AI-authorship check
+            const suspicion = gradeData.authorship?.suspicion;
+            const aiBadge = suspicion === 'medium' || suspicion === 'high'
+                ? ` <span title="${(gradeData.authorship.reasons || []).join('; ').replace(/"/g, '&quot;')}" style="background: ${suspicion === 'high' ? '#c0392b' : '#e67e22'}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-left: 4px;">AI? ${suspicion}</span>`
+                : '';
 
             const githubUrl = result.githubUrl
                 ? `<a href="${result.githubUrl}" target="_blank" style="color: #3498db; text-decoration: none;">${result.githubUrl.substring(0, 30)}...</a>`
@@ -129,7 +137,7 @@ export default (Base) => class extends Base {
             html += `
                 <tr style="${result.needsInstructorIntervention ? 'background: rgba(231, 76, 60, 0.1);' : ''}">
                     <td>${result.studentName || 'Unknown'}</td>
-                    <td>${statusBadge}</td>
+                    <td>${statusBadge}${aiBadge}</td>
                     <td>${grade}</td>
                     <td>${githubUrl}</td>
                     <td>
@@ -419,6 +427,22 @@ export default (Base) => class extends Base {
                             ${penalty.cappedAtMax ? ' (capped at maximum penalty)' : ''}
                         </div>
                     </div>
+                `;
+            }
+
+            // Comment that will be posted to Canvas, and the instructor-only
+            // authorship check (never posted)
+            const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+            detailsHtml += `
+                <h3 style="margin: 24px 0 8px 0; font-size: 18px;">Canvas Comment</h3>
+                <pre style="white-space: pre-wrap; font-family: inherit; margin: 0;">${esc(this.buildCanvasFeedback(grade))}</pre>
+            `;
+            if (grade.authorship) {
+                const reasons = (grade.authorship.reasons || []).map(r => `<li>${esc(r)}</li>`).join('');
+                detailsHtml += `
+                    <h3 style="margin: 24px 0 8px 0; font-size: 18px;">Authorship Check (instructor only)</h3>
+                    <p style="margin: 0;">AI / copied-code suspicion: <strong>${esc(grade.authorship.suspicion || 'none')}</strong>. This doesn't change the score.</p>
+                    ${reasons ? `<ul style="margin: 8px 0 0 20px;">${reasons}</ul>` : ''}
                 `;
             }
 
@@ -793,7 +817,31 @@ export default (Base) => class extends Base {
         }
     }
 
-    async regradeSubmission(index) {
+    // Regrade every result marked "Needs Review" that has a GitHub URL, one
+    // at a time (each clones a repo and runs a grade), after one confirmation.
+    async regradeAllNeedingReview() {
+        const indexes = this.gradingResults
+            .map((r, i) => (r.needsInstructorIntervention && r.githubUrl ? i : -1))
+            .filter(i => i >= 0);
+
+        if (indexes.length === 0) {
+            this.showToast('No submissions needing review have a GitHub URL to regrade', 'warning');
+            return;
+        }
+        if (!confirm(`Regrade ${indexes.length} submission(s) that need review?\n\nEach one re-clones the repository and is graded again.`)) {
+            return;
+        }
+
+        for (let n = 0; n < indexes.length; n++) {
+            this.showToast(`Regrading ${n + 1} of ${indexes.length}...`, 'info');
+            await this.regradeSubmission(indexes[n], { skipConfirm: true });
+        }
+
+        const stillFailing = indexes.filter(i => this.gradingResults[i].needsInstructorIntervention).length;
+        this.showToast(`Regrade finished: ${indexes.length - stillFailing} fixed, ${stillFailing} still need review`, stillFailing ? 'warning' : 'success');
+    }
+
+    async regradeSubmission(index, { skipConfirm = false } = {}) {
         const result = this.gradingResults[index];
 
         if (!result) {
@@ -813,7 +861,7 @@ export default (Base) => class extends Base {
         console.log('GitHub URL:', result.githubUrl);
         console.log('Previous Status:', result.needsInstructorIntervention ? 'Needs Review' : 'Graded');
 
-        const confirmRegrade = confirm(`Regrade submission for ${result.studentName}?\n\nThis will re-analyze the repository and update the grade.`);
+        const confirmRegrade = skipConfirm || confirm(`Regrade submission for ${result.studentName}?\n\nThis will re-analyze the repository and update the grade.`);
 
         if (!confirmRegrade) {
             console.log('❌ Regrade cancelled by user');
@@ -933,42 +981,25 @@ export default (Base) => class extends Base {
         }
     }
 
+    // The comment posted to Canvas: the score and a short note on only the
+    // most significant points. The full breakdown stays in the app. The
+    // authorship check is instructor-only and never goes into this.
     buildCanvasFeedback(gradeResult) {
         const result = gradeResult.result || gradeResult;
+        const maxPoints = result.maxPoints || 50;
 
-        let feedback = `Auto-Graded Unity Assignment\n\n`;
-        feedback += `Overall Grade: ${result.overallGrade}/50\n\n`;
-
-        if (result.criteriaScores) {
-            feedback += `Criteria Breakdown:\n`;
-            Object.entries(result.criteriaScores).forEach(([key, criteria]) => {
-                feedback += `• ${criteria.rating}: ${criteria.score}/${criteria.maxScore}\n`;
-                feedback += `  ${criteria.feedback}\n\n`;
-            });
+        let comment = (result.canvasComment || '').trim();
+        if (!comment) {
+            comment = result.overallFeedback?.improvements?.[0] ||
+                result.overallFeedback?.detailedFeedback || '';
+        }
+        if (comment.length > 300) {
+            comment = comment.slice(0, 297).replace(/\s+\S*$/, '') + '...';
         }
 
-        if (result.overallFeedback) {
-            feedback += `Overall Feedback:\n${result.overallFeedback.detailedFeedback}\n\n`;
-
-            if (result.overallFeedback.strengths?.length > 0) {
-                feedback += `Strengths:\n`;
-                result.overallFeedback.strengths.forEach(strength => {
-                    feedback += `• ${strength}\n`;
-                });
-                feedback += '\n';
-            }
-
-            if (result.overallFeedback.improvements?.length > 0) {
-                feedback += `Areas for Improvement:\n`;
-                result.overallFeedback.improvements.forEach(improvement => {
-                    feedback += `• ${improvement}\n`;
-                });
-                feedback += '\n';
-            }
-        }
-
-        feedback += `\n🤖 Generated with AraLaro`;
-        return feedback;
+        return comment
+            ? `Score: ${result.overallGrade}/${maxPoints}\n${comment}`
+            : `Score: ${result.overallGrade}/${maxPoints}`;
     }
 
     markAsResolved(index) {

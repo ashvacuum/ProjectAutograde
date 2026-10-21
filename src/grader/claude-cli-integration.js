@@ -24,10 +24,16 @@ class ClaudeCLIIntegration {
       let child;
       try {
         // Strip API credentials (main.js loads .env) so the CLI uses the
-        // subscription login instead of billing API credits.
+        // subscription login instead of billing API credits, and variables
+        // inherited from a host Claude Code session (e.g. `npm run dev` from
+        // its terminal), which point the CLI at that session's proxy.
         const env = { ...process.env };
-        delete env.ANTHROPIC_API_KEY;
-        delete env.ANTHROPIC_AUTH_TOKEN;
+        for (const key of Object.keys(env)) {
+          if (key.startsWith('CLAUDE_CODE_') || key === 'CLAUDECODE' ||
+              ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL'].includes(key)) {
+            delete env[key];
+          }
+        }
         child = spawn('claude', args, { shell: true, env });
       } catch (error) {
         return reject(error);
@@ -91,6 +97,20 @@ class ClaudeCLIIntegration {
     return this._detection;
   }
 
+  /**
+   * Send one tiny prompt to prove the CLI can actually grade: installed,
+   * logged in, and the login still valid. `claude auth status` reports
+   * loggedIn even after the token expires, so only a real request tells.
+   */
+  async verify() {
+    try {
+      const reply = await this.analyze('Reply with exactly: ok');
+      return { ok: true, reply: reply.slice(0, 40) };
+    } catch (error) {
+      return { ok: false, error: error.message };
+    }
+  }
+
   async isAvailable() {
     return (await this.detect()).available;
   }
@@ -105,10 +125,19 @@ class ClaudeCLIIntegration {
       throw new Error(`Claude CLI not available: ${detection.error || 'unknown'}`);
     }
 
-    const result = await this._run(['-p', '--model', 'claude-haiku-5-5', '--output-format', 'text'], prompt);
+    // --tools "" disables every built-in tool: the prompt already holds the
+    // rubric, folder tree and source, so the model only reads and scores.
+    // Without this it tries gh/WebFetch to look at the repo itself.
+    const args = ['-p', '--model', 'claude-haiku-5-5', '--output-format', 'text', '--tools', '""'];
+
+    const result = await this._run(args, prompt, 300000);
 
     if (result.code !== 0) {
-      const message = result.stderr || `Claude CLI exited with code ${result.code}`;
+      const output = `${result.stderr}\n${result.stdout}`;
+      if (/401|failed to authenticate|oauth|not logged in|invalid api key/i.test(output)) {
+        throw new Error('Claude CLI login has expired or is invalid. Open a terminal and run: claude auth login');
+      }
+      const message = result.stderr || result.stdout || `Claude CLI exited with code ${result.code}`;
       throw new Error(`Claude CLI error: ${message}`);
     }
 

@@ -35,6 +35,24 @@ export default (Base) => class extends Base {
         }
     }
 
+    // Sends one tiny prompt through the CLI; catches an expired login, which
+    // "Detected" alone can't.
+    async testClaudeCLI() {
+        const resultEl = document.getElementById('claude-cli-test-result');
+        if (!resultEl) return;
+        resultEl.textContent = 'Testing (sends one short prompt)...';
+        const result = await window.electronAPI.claudeCli.verify();
+        if (result.ok) {
+            resultEl.innerHTML = '<span style="color: #4CAF50;">✓ Claude CLI is logged in and responding.</span>';
+        } else {
+            resultEl.innerHTML = '';
+            const span = document.createElement('span');
+            span.style.color = '#e05050';
+            span.textContent = result.error;
+            resultEl.appendChild(span);
+        }
+    }
+
     async toggleClaudeCLI() {
         const toggleEl = document.getElementById('claude-cli-toggle');
         if (!toggleEl) return;

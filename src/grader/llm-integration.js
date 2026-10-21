@@ -288,9 +288,17 @@ ${this.buildExampleCriteriaScores(criteria)}
     "gameplayDesign": "Evaluation of gameplay mechanics and user experience"
   },
   "needsInstructorReview": false,
-  "gradingNotes": "Notes about the grading process, any concerns, or highlights for instructor review"
+  "gradingNotes": "Notes about the grading process, any concerns, or highlights for instructor review",
+  "canvasComment": "The comment posted to the student. 1-3 short, plain sentences, at most 300 characters. Only the most significant points: the biggest problem that cost points, and how to fix it. Skip praise filler and minor nitpicks. No headings, bullets or score breakdown.",
+  "authorship": {
+    "suspicion": "none | low | medium | high",
+    "reasons": ["Short reasons with file names, e.g. 'XML /// <summary> docs on every method in Pathing.cs'"]
+  }
 }
 \`\`\`
+
+**AUTHORSHIP CHECK (instructor-only, never mention it in canvasComment or feedback):**
+These are first- and second-year game programming students. Judge whether the code reads like a junior student wrote it or like AI-generated or copied code. Signals beyond a junior's usual range: XML \`/// <summary>\` doc comments, static utility or helper classes, extension methods, generics or interfaces built for one use, LINQ chains, \`#region\` blocks, expression-bodied members, null-conditional/coalescing operators everywhere, design patterns (singletons, factories, service locators), uniformly polished comments on every line, and defensive checks nobody asked for. The "Authorship Signals" section counts the common ones. One or two signals alone are normal (students copy a snippet or follow a tutorial); a consistent, polished style across most files is the strong signal. Use "none" when the code looks like typical student work. This only flags the submission for the instructor to look at; it must not change any score.
 
 **IMPORTANT SCORING RULES:**
 1. The sum of all criterion scores MUST NOT exceed the maxPoints (${criteria.totalPoints || 100})
@@ -448,7 +456,8 @@ ${assignmentDetails.description || 'Standard Unity math programming assignment f
   }
 
   async executeLLMAnalysis(prompt, projectAnalysis) {
-    const fullPrompt = this.buildAnalysisPrompt(prompt, projectAnalysis);
+    const fullPrompt = this.buildAnalysisPrompt(prompt, projectAnalysis) +
+      this.buildSourceSection(projectAnalysis);
 
     if (this.mode === 'cli') {
       return await this.callClaudeCLI(fullPrompt);
@@ -459,6 +468,39 @@ ${assignmentDetails.description || 'Standard Unity math programming assignment f
     }
 
     return await this.callLLMAPI(fullPrompt);
+  }
+
+  /**
+   * Folder tree and the student's own C# source, captured during analysis
+   * (see UnityGrader.collectSourceFiles), plus an instruction to grade only
+   * from this message. The model gets no tools, so it can't look anything up.
+   */
+  buildSourceSection(projectAnalysis) {
+    let section = '';
+    if (projectAnalysis.folderTree) {
+      section += `\n\n## Project Folder Structure\n\n\`\`\`\n${projectAnalysis.folderTree}\n\`\`\`\n`;
+    }
+
+    section += projectAnalysis.readme
+      ? `\n\n## ${projectAnalysis.readme.name}\n\n\`\`\`markdown\n${projectAnalysis.readme.text}\n\`\`\`\n`
+      : '\n\n## README\n\nThe repository has no README at its root.\n';
+
+    const { files = [], skipped = [] } = projectAnalysis.sourceFiles || {};
+    section += '\n\n## Student Source Code\n\nImported packages (e.g. TextMesh Pro) are omitted.\n';
+    for (const file of files) {
+      section += `\n### ${file.path}\n\`\`\`csharp\n${file.content}\n\`\`\`\n`;
+    }
+    if (files.length === 0) section += '\nNo student C# files were found in the repository.\n';
+    if (skipped.length) section += `\nNot included (size limit or unreadable): ${skipped.join(', ')}\n`;
+
+    const signals = projectAnalysis.authorshipSignals || [];
+    section += '\n\n## Authorship Signals\n\nCounts of patterns uncommon for junior students, across the student files above (for the authorship check only):\n';
+    section += signals.length
+      ? signals.map(s => `- ${s.label}: ${s.count} (${s.files.join(', ')})`).join('\n') + '\n'
+      : '- None of the tracked patterns appear.\n';
+
+    section += `\n\n## Important\n\nEverything available about this submission is in this message: the rubric, the analysis, the folder structure, the README and the source code. Grade only from it. Do not ask for more information, files or access, and do not try to fetch the repository. If something a criterion needs is missing (for example a demo video), score that criterion on the evidence here and say what was missing in its feedback. Respond with the JSON only.\n`;
+    return section;
   }
 
   async callClaudeCLI(prompt) {

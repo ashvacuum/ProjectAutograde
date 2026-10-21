@@ -1127,6 +1127,8 @@
                             <input type="checkbox" id="claude-cli-toggle" onchange="app.toggleClaudeCLI()" style="margin-right: 8px;" disabled>
                             Use Claude CLI for grading
                         </label>
+                        <button class="btn btn-secondary" onclick="app.testClaudeCLI()" style="margin-top: 8px;">Test Claude CLI</button>
+                        <div id="claude-cli-test-result" style="margin-top: 8px;"></div>
                     </div>
 
                     <!-- Late Penalty Settings -->

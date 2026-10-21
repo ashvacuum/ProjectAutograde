@@ -252,6 +252,7 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
   console.log('Timestamp:', new Date().toISOString());
   console.log('========================================\n');
 
+  let analysis = null;
   try {
     // Ensure all data is serializable
     let cleanCriteria = JSON.parse(JSON.stringify(criteria));
@@ -278,7 +279,7 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
     });
 
     console.log('📂 Step 1/3: Cloning and analyzing Unity project...');
-    const analysis = await unityGrader.analyzeProject(repoUrl, cleanCriteria);
+    analysis = await unityGrader.analyzeProject(repoUrl, cleanCriteria);
     console.log('✅ Unity project analysis complete');
     console.log('   - Files found:', analysis.codeFiles?.length || 0);
     console.log('   - Valid Unity project:', analysis.success);
@@ -409,6 +410,9 @@ ipcMain.handle('grader-analyze-project', async (event, repoUrl, criteria, assign
     }
   } catch (error) {
     return { success: false, error: error.message };
+  } finally {
+    // The clone is kept through grading and deleted once it's done, whatever the outcome
+    if (analysis?.projectPath) await unityGrader.cleanup(analysis.projectPath);
   }
 });
 
@@ -463,6 +467,10 @@ ipcMain.handle('claude-cli-detect', async () => {
   } catch (error) {
     return { success: false, available: false, error: error.message };
   }
+});
+
+ipcMain.handle('claude-cli-verify', async () => {
+  return await llmIntegration.claudeCLI.verify();
 });
 
 ipcMain.handle('claude-cli-get-setting', async () => {

@@ -2,6 +2,9 @@ const fs = require('fs').promises;
 const path = require('path');
 const GitCommands = require('../utils/git-commands');
 
+// Folders of imported packages, not student work
+const VENDOR_DIR = /^(TextMesh Pro|TextMeshPro|Packages|Plugins|ThirdParty)$/i;
+
 class UnityGrader {
   constructor() {
     this.tempDir = path.join(__dirname, '../../temp');
@@ -146,11 +149,17 @@ class UnityGrader {
         success: true
       };
 
+      // Everything the grader model needs goes into the prompt: it grades
+      // only from what it's given.
+      analysis.folderTree = await this.buildFolderTree(cloneResult.path);
+      analysis.sourceFiles = await this.collectSourceFiles(cloneResult.path, csharpFiles);
+      analysis.readme = await this.readReadme(cloneResult.path);
+      analysis.authorshipSignals = this.countAuthorshipSignals(analysis.sourceFiles.files);
+
       this.analysisResults[repoUrl] = analysis;
 
-      // Cleanup the cloned repository
-      await this.cleanup(cloneResult.path);
-
+      // The clone is left in place; the caller deletes analysis.projectPath
+      // once grading is done (see grader-analyze-project in main.js).
       return analysis;
 
     } catch (error) {
@@ -681,6 +690,126 @@ class UnityGrader {
     } catch (error) {
       console.error(`Cleanup failed for ${projectPath}:`, error.message);
       return false;
+    }
+  }
+
+  /**
+   * Indented tree of the cloned project: folders first, then files. Skips
+   * .meta files, git/IDE/build folders and imported packages (listed as
+   * "(omitted)"). Capped at maxLines so huge projects stay readable.
+   */
+  async buildFolderTree(root, maxLines = 300) {
+    const skip = /^(\.git|\.vs|\.idea|Library|Temp|Obj|Logs|Build|Builds|UserSettings|node_modules)$/i;
+    const lines = [];
+
+    const walk = async (dir, depth) => {
+      let entries;
+      try {
+        entries = await fs.readdir(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      const dirs = entries.filter(e => e.isDirectory() && !skip.test(e.name)).sort((a, b) => a.name.localeCompare(b.name));
+      const files = entries.filter(e => e.isFile() && !e.name.endsWith('.meta')).sort((a, b) => a.name.localeCompare(b.name));
+      const indent = '  '.repeat(depth);
+
+      for (const d of dirs) {
+        if (lines.length >= maxLines) return;
+        if (VENDOR_DIR.test(d.name)) {
+          lines.push(`${indent}${d.name}/ (imported package, omitted)`);
+          continue;
+        }
+        lines.push(`${indent}${d.name}/`);
+        await walk(path.join(dir, d.name), depth + 1);
+      }
+      for (const f of files) {
+        if (lines.length >= maxLines) return;
+        lines.push(`${indent}${f.name}`);
+      }
+    };
+
+    await walk(root, 0);
+    if (lines.length >= maxLines) lines.push(`... (truncated at ${maxLines} entries)`);
+    return lines.join('\n');
+  }
+
+  /**
+   * The student's own C# files as { files: [{ path, content }], skipped },
+   * with paths relative to the repo root. Imported packages are left out,
+   * and the total is capped (~30k tokens); overflow is listed in skipped.
+   */
+  async collectSourceFiles(root, csharpFiles, maxChars = 120000) {
+    const files = [];
+    const skipped = [];
+    let used = 0;
+
+    for (const filePath of csharpFiles) {
+      const rel = path.relative(root, filePath);
+      if (rel.split(/[\\/]/).some(part => VENDOR_DIR.test(part))) continue;
+
+      let content;
+      try {
+        content = await fs.readFile(filePath, 'utf-8');
+      } catch {
+        skipped.push(rel);
+        continue;
+      }
+      if (used + content.length > maxChars) {
+        skipped.push(rel);
+        continue;
+      }
+      used += content.length;
+      files.push({ path: rel, content });
+    }
+
+    return { files, skipped };
+  }
+
+  /**
+   * Count code patterns that are unusual for junior students, per signal:
+   * { label, count, files }. Only a hint for the AI-authorship check; the
+   * model weighs it against the code itself.
+   */
+  countAuthorshipSignals(sourceFiles) {
+    const checks = [
+      ['XML doc comments (/// <summary>)', /^\s*\/\/\/\s*<summary>/gm],
+      ['Static classes', /\bstatic\s+(partial\s+)?class\b/g],
+      ['Extension methods (this T param)', /\bstatic\s+[\w<>[\],\s]+\s+\w+\s*\(\s*this\s+/g],
+      ['LINQ calls', /\.(Select|Where|OrderBy|OrderByDescending|Aggregate|SelectMany|GroupBy|ToDictionary|Any|All|FirstOrDefault)\s*\(/g],
+      ['#region blocks', /^\s*#region\b/gm],
+      ['Expression-bodied members (=>)', /\)\s*=>\s*[^{;]+;|\b(get|set)\s*=>/g],
+      ['Null-conditional / coalescing (?. ??)', /\?\.|\?\?/g],
+      ['Interfaces declared', /\binterface\s+I[A-Z]\w*/g],
+      ['Generic type parameters (<T>)', /\b(class|void|static|public|private)\b[^\n;{]*<T\b/g],
+      ['Singleton Instance pattern', /\bstatic\s+\w+\s+Instance\b/g],
+      ['Pattern matching (is not / switch expressions)', /\bis\s+not\b|\bswitch\s*\{|=>\s*\w+\s*switch\b/g]
+    ];
+
+    const signals = [];
+    for (const [label, regex] of checks) {
+      let count = 0;
+      const files = [];
+      for (const file of sourceFiles) {
+        const hits = (file.content.match(regex) || []).length;
+        if (hits) {
+          count += hits;
+          files.push(path.basename(file.path));
+        }
+      }
+      if (count) signals.push({ label, count, files });
+    }
+    return signals;
+  }
+
+  // Root README text (assignments ask for demo video links there), capped.
+  async readReadme(root, maxChars = 8000) {
+    try {
+      const name = (await fs.readdir(root)).find(f => /^readme(\.md|\.txt)?$/i.test(f));
+      if (!name) return null;
+      const text = await fs.readFile(path.join(root, name), 'utf-8');
+      return { name, text: text.length > maxChars ? text.slice(0, maxChars) + '\n... (truncated)' : text };
+    } catch {
+      return null;
     }
   }
 
